@@ -1,0 +1,80 @@
+<div class="container-fluid">
+  <h2>Create New AI Agent</h2>
+  <form [formGroup]="myForm" class="form-group" (ngSubmit)="onSubmit()">
+    <div class="form-control">
+      <label>Username</label>
+      <input  formControlName="username" type="text" >
+    </div>
+
+    <div class="form-control">
+      <label>Agent Name</label>
+      <input formControlName="agentName" type="text"  >
+    </div>
+
+    <div class="form-control">
+      <label>Email</label>
+      <input formControlName="email" type="text" >
+    </div>
+
+    <label for="markets"> Target Markets :</label>
+    <select formControlName="targetMarket" id="markets" name="Target Market">
+        <option *ngFor="let market of marketLists">{{market}}</option>
+    </select>
+
+    <div formGroupName="features" class="features">
+      <h3>Features:</h3>
+
+      <div *ngFor="let feature of featureLists; let i=index">
+        <label>{{feature.name}}</label>
+        <input #featureCheckBox type="checkbox" (change)="addOuRemoveFeature(feature.name)" >
+        <ng-container *ngIf="featureCheckBox.checked">
+          <div [formGroupName]="feature.name" class="les param" *ngFor="let params of feature.parameters; let i = index" >
+            <label>{{params}}</label>
+           <input type="text" [formControlName]="params">
+          </div>
+
+        </ng-container>
+    
+      </div>
+    </div>
+
+
+
+
+
+    <div class="input" >
+      <h3>Input time protocol:</h3>
+      <label for="inputTime">Time Interval<br></label>
+      <label> Start </label>
+      <input formControlName="inputStartTime" id="inputTime" type="time">
+      <label> End </label>
+      <input formControlName="inputEndTime" type="time">
+      <label>Frequency</label>
+      <select name="frequency">
+        <option value="5">5 minute</option>
+        <option value="10">10 minute</option>
+        <option value="1">1 hour</option>
+      </select>
+    </div>
+
+    <div class="output" >
+      <h3>Output time protocol:</h3>
+      <label for="outputTime">Time Interval<br></label>
+      <label> Start </label>
+      <input formControlName="outputStartTime" id="outputTime" type="time">
+      <label> End </label>
+      <input formControlName="outputEndTime" type="time">
+      <label>Frequency</label>
+      <select name="frequency">
+        <option value="5">5 minute</option>
+        <option value="10">10 minute</option>
+        <option value="1">1 hour</option>
+      </select>
+    </div>
+
+
+    <button [disabled]='!myForm.valid' class="btn" type="submit">Register</button>
+
+    {{myForm.value | json }}
+  </form>
+</div>
