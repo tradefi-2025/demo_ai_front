@@ -1,8 +1,4 @@
 [build]
-  command = "ng build --prod"
+  command = "npm install && ng build"
   publish = "dist/FrontDemo" # Remplacez FrontDemo par le nom de votre dossier de build
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
