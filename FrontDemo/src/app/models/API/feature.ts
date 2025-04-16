@@ -1,5 +1,6 @@
 
 export interface Feature{
    name : string,
-   parameters : string[]
+   description : string,
+   parameters : { [key: string]: string}
 }

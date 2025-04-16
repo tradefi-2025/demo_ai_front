@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../environnement/environnment';
 import { FeatureInDto } from "../models/request/feature-in-dto";
 import {Observable, tap} from "rxjs";
+import { AgentFormDTO } from '../models/request/new-agent-form-dto';
 
 @Injectable({
   providedIn: 'root'
@@ -18,6 +19,10 @@ export class InfoService {
 
   getFeatures(): Observable<FeatureInDto>{
     return this.http.get<FeatureInDto>(this.baseUrl+"/features");
+  }
+
+  createAgent(agentFormDTO : AgentFormDTO): Observable<boolean>{
+    return this.http.post<boolean>(this.baseUrl+"/createAgent",agentFormDTO)
   }
 
 }

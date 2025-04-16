@@ -1,80 +1,122 @@
 <div class="container-fluid">
   <h2>Create New AI Agent</h2>
-  <form [formGroup]="myForm" class="form-group" (ngSubmit)="onSubmit()">
-    <div class="form-control">
-      <label>Username</label>
-      <input  formControlName="username" type="text" >
-    </div>
+  
+  <form [formGroup]="myForm" (ngSubmit)="onSubmit()" class="form-group">
+    <!-- Informations de base -->
+    <div class="form-section">
+      <div class="form-control">
+        <label for="username">Username</label>
+        <input id="username" formControlName="username" type="text" placeholder="Enter your username">
+        <div *ngIf="myForm.get('username')?.invalid && myForm.get('username')?.touched" class="error-message">
+          Username is required
+        </div>
+      </div>
 
-    <div class="form-control">
-      <label>Agent Name</label>
-      <input formControlName="agentName" type="text"  >
-    </div>
+      <div class="form-control">
+        <label for="agentName">Agent Name</label>
+        <input id="agentName" formControlName="agentName" type="text" placeholder="Name your AI agent">
+        <div *ngIf="myForm.get('agentName')?.invalid && myForm.get('agentName')?.touched" class="error-message">
+          Agent name is required
+        </div>
+      </div>
 
-    <div class="form-control">
-      <label>Email</label>
-      <input formControlName="email" type="text" >
-    </div>
-
-    <label for="markets"> Target Markets :</label>
-    <select formControlName="targetMarket" id="markets" name="Target Market">
-        <option *ngFor="let market of marketLists">{{market}}</option>
-    </select>
-
-    <div formGroupName="features" class="features">
-      <h3>Features:</h3>
-
-      <div *ngFor="let feature of featureLists; let i=index">
-        <label>{{feature.name}}</label>
-        <input #featureCheckBox type="checkbox" (change)="addOuRemoveFeature(feature.name)" >
-        <ng-container *ngIf="featureCheckBox.checked">
-          <div [formGroupName]="feature.name" class="les param" *ngFor="let params of feature.parameters; let i = index" >
-            <label>{{params}}</label>
-           <input type="text" [formControlName]="params">
-          </div>
-
-        </ng-container>
-    
+      <div class="form-control">
+        <label for="email">Email</label>
+        <input id="email" formControlName="email" type="email" placeholder="Enter your email address">
       </div>
     </div>
 
-
-
-
-
-    <div class="input" >
-      <h3>Input time protocol:</h3>
-      <label for="inputTime">Time Interval<br></label>
-      <label> Start </label>
-      <input formControlName="inputStartTime" id="inputTime" type="time">
-      <label> End </label>
-      <input formControlName="inputEndTime" type="time">
-      <label>Frequency</label>
-      <select name="frequency">
-        <option value="5">5 minute</option>
-        <option value="10">10 minute</option>
-        <option value="1">1 hour</option>
+    <!-- Target Markets -->
+    <div class="form-section">
+      <label for="markets">Target Markets:</label>
+      <select formControlName="targetMarket" id="markets" name="Target Market">
+        <option *ngFor="let market of marketLists" [value]="market">{{market}}</option>
       </select>
     </div>
 
-    <div class="output" >
-      <h3>Output time protocol:</h3>
-      <label for="outputTime">Time Interval<br></label>
-      <label> Start </label>
-      <input formControlName="outputStartTime" id="outputTime" type="time">
-      <label> End </label>
-      <input formControlName="outputEndTime" type="time">
-      <label>Frequency</label>
-      <select name="frequency">
-        <option value="5">5 minute</option>
-        <option value="10">10 minute</option>
-        <option value="1">1 hour</option>
-      </select>
+    <!-- Features Section -->
+    <div formGroupName="features" class="features-section">
+      <h3>Features:</h3>
+
+      <div *ngFor="let feature of featureLists" class="feature-item">
+        <div class="feature-header">
+          <label [for]="'feature-' + feature.name">{{feature.name}}</label>
+          <input 
+            [id]="'feature-' + feature.name"
+            type="checkbox" 
+            [checked]="isFeatureSelected(feature.name)"
+            (change)="addOuRemoveFeature(feature.name)">
+        </div>
+
+        <div *ngIf="isFeatureSelected(feature.name)" class="feature-params">
+          <div [formGroupName]="feature.name">
+            <div *ngFor="let param of getParamKeys(feature)" class="param-item">
+              <label [for]="feature.name + '-' + param">{{param}}</label>
+              <input 
+                [id]="feature.name + '-' + param"
+                type="text" 
+                [formControlName]="param">
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
+    <!-- Time Protocols -->
+    <div class="form-section">
+      <!-- Input Protocol -->
+      <div class="time-protocol">
+        <h3>Input Time Protocol:</h3>
+        <div class="time-controls">
+          <div>
+            <label for="inputStartTime">Start</label>
+            <input formControlName="inputStartTime" id="inputStartTime" type="time">
+          </div>
+          <div>
+            <label for="inputEndTime">End</label>
+            <input formControlName="inputEndTime" id="inputEndTime" type="time">
+          </div>
+          <div>
+            <label for="inputFreq">Frequency</label>
+            <select formControlName="inputFrequency" id="inputFreq" name="frequency">
+              <option value="5">5 minutes</option>
+              <option value="10">10 minutes</option>
+              <option value="60">1 hour</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
-    <button [disabled]='!myForm.valid' class="btn" type="submit">Register</button>
+      <!-- Output Protocol -->
+      <div class="time-protocol">
+        <h3>Output Time Protocol:</h3>
+        <div class="time-controls">
+          <div>
+            <label for="outputStartTime">Start</label>
+            <input formControlName="outputStartTime" id="outputStartTime" type="time">
+          </div>
+          <div>
+            <label for="outputEndTime">End</label>
+            <input formControlName="outputEndTime" id="outputEndTime" type="time">
+          </div>
+          <div>
+            <label for="outputFreq">Frequency</label>
+            <select  formControlName="outputFrequency" id="outputFreq" name="frequency">
+              <option value="5">5 minutes</option>
+              <option value="10">10 minutes</option>
+              <option value="60">1 hour</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    {{myForm.value | json }}
+    <!-- Submit Button -->
+    <button class="btn" type="submit" [disabled]="myForm.invalid">Create AI Agent</button>
+    
+    <!-- Debug: Form Value -->
+    <div class="debug-info">
+      <pre>{{ myForm.value | json }}</pre>
+    </div>
   </form>
 </div>
