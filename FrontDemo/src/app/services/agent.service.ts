@@ -8,21 +8,20 @@ import { AgentFormDTO } from '../models/request/new-agent-form-dto';
 @Injectable({
   providedIn: 'root'
 })
-export class InfoService {
+export class AgentService {
 
   features!: FeatureInDto;
-  private readonly baseUrl = environment.apiUrl;
+  private readonly baseUrl = environment.apiUrl+'/agent';
 
   constructor(private readonly http: HttpClient) {
   }
 
 
-  getFeatures(): Observable<FeatureInDto>{
-    return this.http.get<FeatureInDto>(this.baseUrl+"/features");
-  }
 
   createAgent(agentFormDTO : AgentFormDTO): Observable<boolean>{
-    return this.http.post<boolean>(this.baseUrl+"/createAgent",agentFormDTO)
+    return this.http.post<boolean>(this.baseUrl+"/create",agentFormDTO
+      ,{ withCredentials: true}
+    )
   }
 
 }

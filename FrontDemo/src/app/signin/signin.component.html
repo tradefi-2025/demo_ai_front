@@ -1,0 +1,56 @@
+<div class="login-overlay">
+    <div class="login-modal">
+        <div class="login-header">
+            <h2>Login</h2>
+            <p>Please sign in to access the application</p>
+        </div>
+        
+        <form #myForm="ngForm" (ngSubmit)="signin()" class="login-form">
+            <div class="form-group">
+                <label for="Email">Email address</label>
+                <div class="input-with-icon">
+                    <i class="email-icon"></i>
+                    <input 
+                        type="email" 
+                        id="Email" 
+                        name="Email" 
+                        required
+                        placeholder="Enter your email"
+                        [(ngModel)]="email"
+                    >
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-with-icon">
+                    <i class="password-icon"></i>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required 
+                        placeholder="Enter your password"
+                        [(ngModel)]="password"
+                    >
+                </div>
+            </div>
+            
+            <div *ngIf="isLoginError && notTouched()" class="error-message" [ngClass]="{'locked-message': isLocked}">
+                <i class="error-icon"></i>
+                {{errorMsg}}
+            </div>
+            
+            <button class="login-btn" type="submit" [disabled]="myForm.invalid || isLocked">
+                <span *ngIf="!isLoading && !isLocked">Sign in</span>
+                <span *ngIf="isLoading && !isLocked" class="spinner"></span>
+                <span *ngIf="isLocked">Account locked</span>
+            </button>
+        </form>
+        
+        <div class="login-footer">
+            <p>Don't have an account yet?</p>
+            <a routerLink="/sign-up" routerLinkActive="active" class="register-link">Create an account</a>
+        </div>
+    </div>
+</div>

@@ -4,13 +4,6 @@
   <form [formGroup]="myForm" (ngSubmit)="onSubmit()" class="form-group">
     <!-- Informations de base -->
     <div class="form-section">
-      <div class="form-control">
-        <label for="username">Username</label>
-        <input id="username" formControlName="username" type="text" placeholder="Enter your username">
-        <div *ngIf="myForm.get('username')?.invalid && myForm.get('username')?.touched" class="error-message">
-          Username is required
-        </div>
-      </div>
 
       <div class="form-control">
         <label for="agentName">Agent Name</label>
@@ -18,11 +11,6 @@
         <div *ngIf="myForm.get('agentName')?.invalid && myForm.get('agentName')?.touched" class="error-message">
           Agent name is required
         </div>
-      </div>
-
-      <div class="form-control">
-        <label for="email">Email</label>
-        <input id="email" formControlName="email" type="email" placeholder="Enter your email address">
       </div>
     </div>
 
@@ -114,9 +102,6 @@
     <!-- Submit Button -->
     <button class="btn" type="submit" [disabled]="myForm.invalid">Create AI Agent</button>
     
-    <!-- Debug: Form Value -->
-    <div class="debug-info">
-      <pre>{{ myForm.value | json }}</pre>
-    </div>
+
   </form>
 </div>

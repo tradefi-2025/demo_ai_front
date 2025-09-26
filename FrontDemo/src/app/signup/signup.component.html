@@ -1,0 +1,70 @@
+<div class="signup-overlay">
+    <div class="signup-modal">
+        <div class="signup-header">
+            <h2>Create Account</h2>
+            <p>Register to start creating AI agents</p>
+        </div>
+        
+        <form #signupForm="ngForm" (ngSubmit)="signUp()" class="signup-form">
+            <div class="form-group">
+                <label for="email">Email address</label>
+                <div class="input-with-icon">
+                    <i class="email-icon"></i>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        required
+                        placeholder="Enter your email address"
+                        [(ngModel)]="email"
+                    >
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="name">Full Name</label>
+                <div class="input-with-icon">
+                    <i class="name-icon"></i>
+                    <input 
+                        type="text" 
+                        id="name" 
+                        name="name" 
+                        required
+                        placeholder="Enter your full name"
+                        [(ngModel)]="name"
+                    >
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-with-icon">
+                    <i class="password-icon"></i>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required 
+                        placeholder="Choose a secure password"
+                        [(ngModel)]="password"
+                    >
+                </div>
+            </div>
+            
+            <div *ngIf="!!errorMessage" class="error-message">
+                <i class="error-icon"></i>
+                {{errorMessage}}
+            </div>
+            
+            <button class="signup-btn" type="submit" [disabled]="signupForm.invalid || isLoading">
+                <span *ngIf="!isLoading">Create Account</span>
+                <span *ngIf="isLoading" class="spinner"></span>
+            </button>
+        </form>
+        
+        <div class="signup-footer">
+            <p>Already have an account?</p>
+            <a routerLink="/sign-in" routerLinkActive="active" class="login-link">Sign in</a>
+        </div>
+    </div>
+</div>

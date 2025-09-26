@@ -1,8 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { MARKETS_LIST } from "../shared/data/const-market-list";
 import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { InfoService } from "../services/agent.service";
+import { FeatureService } from '../services/feature.service';
 import { Feature } from "../models/API/feature";
+import { AgentService } from '../services/agent.service';
+import { AgentFormDTO } from '../models/request/new-agent-form-dto';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-nouveau-agent',
@@ -16,8 +19,15 @@ export class NouveauAgentComponent implements OnInit {
   // Données
   marketLists = MARKETS_LIST;
   featureLists!: Feature[];
+  
+  // Modal d'erreur
+  showErrorModal: boolean = false;
+  errorMessage: string = '';
 
-  constructor(private fb: FormBuilder, private infoService: InfoService) {}
+  constructor(private fb: FormBuilder,
+     private featureService: FeatureService,
+    private agentService : AgentService,
+  private router: Router) {}
 
   ngOnInit(): void {
     this.initForm();
@@ -27,9 +37,7 @@ export class NouveauAgentComponent implements OnInit {
   // Initialisation du formulaire
   private initForm(): void {
     this.myForm = this.fb.group({
-      username: ['', [Validators.required]],
       agentName: ['', [Validators.required]],
-      email: [''],
       targetMarket: [''],
       inputStartTime: [''],
       inputEndTime: [''],
@@ -43,7 +51,7 @@ export class NouveauAgentComponent implements OnInit {
 
   // Charge les features depuis l'API
   private loadFeatures(): void {
-    this.infoService.getFeatures().subscribe(
+    this.featureService.getFeatures().subscribe(
       (res) => this.featureLists = res.features
     );
   }
@@ -92,8 +100,45 @@ export class NouveauAgentComponent implements OnInit {
   }
 
   private sendFormToBack(){
-    
+    //maper le form à un AgentFormDTO()
+    const agentFormDTO = {
+      agentName: this.myForm.get('agentName')?.value,
+      targetMarket: this.myForm.get('targetMarket')?.value,
+      inputStartTime: this.myForm.get('inputStartTime')?.value,
+      inputEndTime: this.myForm.get('inputEndTime')?.value,
+      inputFrequency: this.myForm.get('inputFrequency')?.value,
+      outputStartTime: this.myForm.get('outputStartTime')?.value,
+      outputEndTime: this.myForm.get('outputEndTime')?.value,
+      outputFrequency: this.myForm.get('outputFrequency')?.value,
+      features: this.myForm.get('features')?.value
+    } as AgentFormDTO;
+
+    this.agentService.createAgent(agentFormDTO).subscribe({
+      next: (value) => {
+        if (value){
+          this.router.navigate(['/consulter-agent'])
+        }else{
+          this.errorModal("La création de l'agent a échoué");
+        }
+      },
+      error: (err) => {
+        this.errorModal(err.message || "Une erreur est survenue lors de la création de l'agent");
+      }
+    })
   }
+  
+  // Fonction pour afficher le modal d'erreur
+  errorModal(msg?: string): void {
+    this.errorMessage = msg || "Une erreur est survenue, veuillez réessayer";
+    this.showErrorModal = true;
+  }
+  
+  // Fonction pour fermer le modal
+  closeModal(): void {
+    this.showErrorModal = false;
+    this.errorMessage = '';
+  }
+  
   // Soumet le formulaire
   onSubmit(): void {
     if (this.myForm.valid) {

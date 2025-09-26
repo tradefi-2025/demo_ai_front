@@ -1,7 +1,5 @@
 export interface AgentFormDTO {
-    username: string;
     agentName: string;
-    email: string;
     targetMarket: string;
     inputStartTime: string;
     inputEndTime: string;

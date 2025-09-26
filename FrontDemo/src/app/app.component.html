@@ -1,14 +1,31 @@
-<!-- Toolbar -->
-<div class="toolbar" role="banner">
-  <span>AI Agent Manager</span>
-  <div class="spacer"></div>
-</div>
+<ng-container *ngIf="authService.isAuthenticated$ | async; else unauthenticated">
+  <!-- Toolbar for authenticated users -->
+  <div class="toolbar" role="banner">
+    <span>AI Agent Manager</span>
+    <div class="spacer"></div>
+    <div class="user-section">
+      <div class="user-info">
+        <div class="welcome-message">Hello, {{username}} !</div>
+        <a (click)="authService.signOut()" class="sign-out-btn">
+          <i class="sign-out-icon"></i>Sign out
+        </a>
+      </div>
+    </div>
+  </div>
 
-<nav>
-  <a routerLink="/nouveau-agent" routerLinkActive="active">Create a new AI agent</a>
-  <a routerLink="/consulter-agent" routerLinkActive="active">Manage AI agents</a>
-</nav>
+  <nav>
+    <a routerLink="/nouveau-agent" routerLinkActive="active">Create a new AI agent</a>
+    <a routerLink="/consulter-agent" routerLinkActive="active">Manage AI agents</a>
+  </nav>
 
-<div class="main-container">
-  <router-outlet></router-outlet>
-</div>
+  <div class="main-container">
+    <router-outlet></router-outlet>
+  </div>
+</ng-container>
+
+<ng-template #unauthenticated>
+  <!-- Only show the router outlet for unauthenticated users -->
+  <div class="auth-background">
+    <router-outlet></router-outlet>
+  </div>
+</ng-template>
