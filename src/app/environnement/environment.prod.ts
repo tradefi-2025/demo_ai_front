@@ -1,4 +1,4 @@
 export const environment = {
     production: true,
-    apiUrl: 'https://backdemoai.azurewebsites.net/api' // URL de production
+    apiUrl: 'https://162.159.140.98/api' // URL de production
   };
