@@ -20,10 +20,8 @@ canActivate(
       map((isAuth: boolean) => {
         
         if (isAuth) {
-          console.log("i am here and i am allwing")
           return true;
         } else {
-          console.log("i am here and i am not allwing")
           return this.router.createUrlTree(['/sign-in']);
           
         }

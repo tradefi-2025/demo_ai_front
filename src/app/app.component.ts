@@ -8,12 +8,20 @@ import { AuthService } from './services/auth.service';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
+  title = 'FrontDemo';
+  name : string = ''
+
 
   constructor(public authService: AuthService ) {
 
   }
-
-  username = sessionStorage.getItem("name"); 
-  title = 'FrontDemo';
+  ngOnInit(): void {
+    this.authService.userDetails$
+    .subscribe(userDetails => {
+      if (userDetails) {
+        this.name = userDetails.name;
+      }
+    });
+  }
 
 }

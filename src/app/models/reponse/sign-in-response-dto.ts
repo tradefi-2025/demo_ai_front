@@ -1,5 +1,7 @@
 
 export interface SignInResponseDto{
     userId : string,
-    name: string
+    name: string,
+    email: string
+
 }
