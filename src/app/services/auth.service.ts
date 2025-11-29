@@ -14,33 +14,29 @@ import { map, catchError } from 'rxjs/operators';
 export class AuthService {
   private readonly baseUrl = environment.apiUrl;
 
-  // Initialise avec la valeur de sessionStorage (pour éviter le flash d'UI)
-  private isAuthenticatedSubject = new BehaviorSubject<boolean>(this.isAuthenticated());
+  private isAuthenticatedSubject = new BehaviorSubject<boolean>(false);
   public isAuthenticated$ = this.isAuthenticatedSubject.asObservable();
+  private userDetailsSubject = new BehaviorSubject<SignInResponseDto | null>(null);
+  public userDetails$ = this.userDetailsSubject.asObservable();
+
+
 
   constructor(private readonly http: HttpClient, private readonly router: Router) {
-    // Vérifie la session au démarrage pour synchroniser avec le serveur
-    this.verifySession().subscribe();
+    this.isAuthenticated().subscribe();
   }
-  
-  verifySession(): Observable<boolean> {
-    return this.http.get<boolean>(`${this.baseUrl}/auth/auth-check`, 
+
+  private isAuthenticated(): Observable<any> {
+    return this.http.get<SignInResponseDto>(`${this.baseUrl}/user/me`,
       { withCredentials: true }
     ).pipe(
-      map(resp => {
-        const ok = resp;
-        this.isAuthenticatedSubject.next(ok);
-        
-        // Si le serveur dit que la session n'est plus valide, nettoyer le stockage local
-        if (!ok) {
-          this.clearSession();
-        }
-        
-        return ok;
+      map(userDetails => {
+        this.isAuthenticatedSubject.next(true);
+        this.userDetailsSubject.next(userDetails);
+        this.router.navigate(['']); 
+        return of(true);
       }),
       catchError(err => {
         // En cas d'erreur, supposer non authentifié
-        this.isAuthenticatedSubject.next(false);
         return of(false);
       })
     );
@@ -52,36 +48,23 @@ export class AuthService {
       signInDto,
       { withCredentials: true }
     ).pipe(
-      tap((response) => this.setSession({
-        userId: response.userId,
-        name: response.name,
-        userEmail: signInDto.email
-      }))
+      tap((userDetails: SignInResponseDto) => {
+        this.userDetailsSubject.next(userDetails);
+      }),
+      tap(() => this.isAuthenticatedSubject.next(true)),
+      tap(() => this.router.navigate(['']))
     );
   }
 
-  signUp(signUpDto : SignUpDto): Observable<string> {
+  signUp(signUpDto: SignUpDto): Observable<string> {
     return this.http.post(
-      this.baseUrl+"/auth/inscription",
-      signUpDto , { responseType: 'text'} ) 
+      this.baseUrl + "/auth/inscription",
+      signUpDto, { responseType: 'text' })
   }
 
-  setSession(sessionData: { userId: string, userEmail: string, name: string }) {
-    sessionStorage.setItem("userId", sessionData.userId);
-    sessionStorage.setItem("userEmail", sessionData.userEmail);
-    sessionStorage.setItem("name", sessionData.name);
-    this.isAuthenticatedSubject.next(true);
-  }
-
-  clearSession() {
-    sessionStorage.removeItem("userId");
-    sessionStorage.removeItem("userEmail");
-    sessionStorage.removeItem("name");
-  }
 
   signOut(): void {
-    this.clearSession();
-    this.http.post<any>(this.baseUrl + "/auth/logout", null, 
+    this.http.post<any>(this.baseUrl + "/auth/logout", null,
       { withCredentials: true }
     ).subscribe({
       next: () => {
@@ -95,11 +78,7 @@ export class AuthService {
     });
   }
 
-  isAuthenticated(): boolean {
-    return !!(sessionStorage.getItem('name') && 
-              sessionStorage.getItem('userId') && 
-              sessionStorage.getItem('userEmail'));
-  }
+
 
 
 }
