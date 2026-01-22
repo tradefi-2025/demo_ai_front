@@ -2,8 +2,9 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../environnement/environment';
 import { FeatureInDto } from "../models/request/feature-in-dto";
-import {Observable, tap} from "rxjs";
+import { Observable } from "rxjs";
 import { AgentFormDTO } from '../models/request/new-agent-form-dto';
+import { AgentsPerUserResponse } from '../models/reponse/agent-response';
 
 @Injectable({
   providedIn: 'root'
@@ -11,16 +12,23 @@ import { AgentFormDTO } from '../models/request/new-agent-form-dto';
 export class AgentService {
 
   features!: FeatureInDto;
-  private readonly baseUrl = environment.apiUrl+'/agent';
+  private readonly baseUrl = environment.apiUrl + '/agent';
 
   constructor(private readonly http: HttpClient) {
   }
 
-
-  createAgent(agentFormDTO : AgentFormDTO): Observable<boolean>{
-    return this.http.post<boolean>(this.baseUrl+"/create",agentFormDTO
-      ,{ withCredentials: true}
-    )
+  createAgent(agentFormDTO: AgentFormDTO): Observable<boolean> {
+    return this.http.post<boolean>(
+      this.baseUrl + "/create",
+      agentFormDTO,
+      { withCredentials: true }
+    );
   }
 
+  getAgentsByUser(): Observable<AgentsPerUserResponse[]> {
+    return this.http.get<AgentsPerUserResponse[]>(
+      this.baseUrl + "/findByUserId",
+      { withCredentials: true }
+    );
+  }
 }

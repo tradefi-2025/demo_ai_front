@@ -25,10 +25,10 @@ export class SignupComponent {
       this.errorMessage = 'Please fill in all required fields';
       return;
     }
-    
+
     this.isLoading = true;
     this.errorMessage = '';
-    
+
     this.authService.signUp({
       email: this.email,
       name: this.name,
@@ -53,7 +53,8 @@ export class SignupComponent {
       },
       error: (error) => {
         this.isLoading = false;
-        this.errorMessage = error?.error?.message || 'An error occurred during registration. Please try again.';
+        const parsed = JSON.parse(error.error);
+        this.errorMessage = parsed.message || 'An error occurred during registration. Please try again.';
       }
     });
   }

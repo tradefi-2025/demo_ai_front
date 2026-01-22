@@ -1,12 +1,12 @@
 export interface AgentFormDTO {
-    agentName: string;
+    name: string;
     targetMarket: string;
-    inputStartTime: string;
-    inputEndTime: string;
-    inputFrequency: string;
-    outputStartTime: string;
-    outputEndTime: string;
-    outputFrequency: string;
+    inputStartTime: number;
+    inputEndTime: number;
+    outputStartTime: number;
+    outputEndTime: number;
+    frequency: string;
+    predictionScale: string;
     features: {
       [featureName: string]: {
         [paramName: string]: string;
