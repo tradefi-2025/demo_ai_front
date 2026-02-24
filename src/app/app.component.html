@@ -1,4 +1,4 @@
-<ng-container *ngIf="authService.isAuthenticated$ | async; else unauthenticated">
+@if (authService.isAuthenticated$ | async) {
   <!-- Toolbar for authenticated users -->
   <div class="toolbar" role="banner">
     <span>AI Agent Manager</span>
@@ -21,11 +21,9 @@
   <div class="main-container">
     <router-outlet></router-outlet>
   </div>
-</ng-container>
-
-<ng-template #unauthenticated>
+} @else {
   <!-- Only show the router outlet for unauthenticated users -->
   <div class="auth-background">
     <router-outlet></router-outlet>
   </div>
-</ng-template>
+}

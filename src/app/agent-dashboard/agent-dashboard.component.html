@@ -21,26 +21,39 @@
       </button>
     </div>
     <div class="sidebar-content">
-      <div *ngIf="isLoadingPredictions" class="loading-state">
-        <div class="spinner"></div>
-        <p>Loading predictions...</p>
-      </div>
-      <div *ngIf="!isLoadingPredictions && displayedPredictions.length === 0" class="empty-state">
-        <p *ngIf="activeTab === 'all'">No predictions yet</p>
-        <p *ngIf="activeTab === 'agent' && !selectedAgent">Select an agent first</p>
-        <p *ngIf="activeTab === 'agent' && selectedAgent">No predictions for this agent</p>
-      </div>
-      <ul class="prediction-list" *ngIf="displayedPredictions.length > 0">
-        <li
-          *ngFor="let prediction of displayedPredictions"
-          class="prediction-item"
-          [class.selected]="selectedPrediction?.predictionId === prediction.predictionId"
-          (click)="selectPrediction(prediction)">
-          <span class="prediction-name">Prediction #{{prediction.predictionId}}</span>
-          <span class="prediction-date">{{prediction.predictionDate}}</span>
-          <span class="prediction-agent">({{getAgentNameById(prediction.agentId)}})</span>
-        </li>
-      </ul>
+      @if (isLoadingPredictions) {
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading predictions...</p>
+        </div>
+      }
+      @if (!isLoadingPredictions && displayedPredictions.length === 0) {
+        <div class="empty-state">
+          @if (activeTab === 'all') {
+            <p>No predictions yet</p>
+          }
+          @if (activeTab === 'agent' && !selectedAgent) {
+            <p>Select an agent first</p>
+          }
+          @if (activeTab === 'agent' && selectedAgent) {
+            <p>No predictions for this agent</p>
+          }
+        </div>
+      }
+      @if (displayedPredictions.length > 0) {
+        <ul class="prediction-list">
+          @for (prediction of displayedPredictions; track prediction.predictionId) {
+            <li
+              class="prediction-item"
+              [class.selected]="selectedPrediction?.predictionId === prediction.predictionId"
+              (click)="selectPrediction(prediction)">
+              <span class="prediction-name">Prediction #{{prediction.predictionId}}</span>
+              <span class="prediction-date">{{prediction.predictionDate}}</span>
+              <span class="prediction-agent">({{getAgentNameById(prediction.agentId)}})</span>
+            </li>
+          }
+        </ul>
+      }
     </div>
   </aside>
 
@@ -49,10 +62,12 @@
     <!-- Calendar Section -->
     <div class="calendar-section">
       <!-- Agent Scale Info -->
-      <div class="scale-info" *ngIf="selectedAgent">
-        <span class="scale-label">Prediction Scale:</span>
-        <span class="scale-value">{{selectedAgent.predictionScale}}</span>
-      </div>
+      @if (selectedAgent) {
+        <div class="scale-info">
+          <span class="scale-label">Prediction Scale:</span>
+          <span class="scale-value">{{selectedAgent.predictionScale}}</span>
+        </div>
+      }
 
       <!-- Year/Month Selectors -->
       <div class="date-selectors">
@@ -60,13 +75,17 @@
           class="date-select"
           [value]="currentMonth"
           (change)="onMonthChange($event)">
-          <option *ngFor="let month of months" [value]="month.value">{{month.name}}</option>
+          @for (month of months; track month.value) {
+            <option [value]="month.value">{{month.name}}</option>
+          }
         </select>
         <select
           class="date-select"
           [value]="currentYear"
           (change)="onYearChange($event)">
-          <option *ngFor="let year of years" [value]="year">{{year}}</option>
+          @for (year of years; track year) {
+            <option [value]="year">{{year}}</option>
+          }
         </select>
       </div>
       <div class="calendar-header">
@@ -82,179 +101,223 @@
         <div class="calendar-weekday">Th</div>
         <div class="calendar-weekday">Fr</div>
         <div class="calendar-weekday">Sa</div>
-        <div
-          *ngFor="let dayObj of calendarDays"
-          class="calendar-day"
-          [class.empty]="dayObj.day === null"
-          [class.selected]="isSelectedDay(dayObj.day)"
-          [class.in-period]="dayObj.isInPeriod"
-          [class.weekend]="dayObj.isWeekend"
-          (click)="selectDay(dayObj.day)">
-          {{dayObj.day}}
-        </div>
+        @for (dayObj of calendarDays; track $index) {
+          <div
+            class="calendar-day"
+            [class.empty]="dayObj.day === null"
+            [class.selected]="isSelectedDay(dayObj.day)"
+            [class.in-period]="dayObj.isInPeriod"
+            [class.weekend]="dayObj.isWeekend"
+            (click)="selectDay(dayObj.day)">
+            {{dayObj.day}}
+          </div>
+        }
       </div>
 
       <!-- Period Label -->
-      <div class="period-label" *ngIf="getPeriodLabel()">
-        <span class="period-icon">📅</span>
-        <span>{{getPeriodLabel()}}</span>
-      </div>
+      @if (getPeriodLabel()) {
+        <div class="period-label">
+          <span class="period-icon">📅</span>
+          <span>{{getPeriodLabel()}}</span>
+        </div>
+      }
 
       <!-- Hour Selector (for HOURLY scale) - Time Picker Style -->
-      <div class="time-picker" *ngIf="shouldShowHourSelector()">
-        <label for="hourSelect">🕐 Select Time:</label>
-        <div class="time-picker-controls">
-          <select
-            id="hourSelect"
-            class="time-select"
-            [value]="selectedHour ?? ''"
-            (change)="onHourChange($event)">
-            <option value="" disabled>-- Hour --</option>
-            <option *ngFor="let hour of hours" [value]="hour">
-              {{hour < 10 ? '0' + hour : hour}}:00
-            </option>
-          </select>
-          <span class="time-display" *ngIf="selectedHour !== null">
-            {{selectedHour < 10 ? '0' + selectedHour : selectedHour}}:00 - {{selectedHour < 9 ? '0' + (selectedHour + 1) : selectedHour + 1}}:00
-          </span>
+      @if (shouldShowHourSelector()) {
+        <div class="time-picker">
+          <label for="hourSelect">🕐 Select Time:</label>
+          <div class="time-picker-controls">
+            <select
+              id="hourSelect"
+              class="time-select"
+              [value]="selectedHour ?? ''"
+              (change)="onHourChange($event)">
+              <option value="" disabled>-- Hour --</option>
+              @for (hour of hours; track hour) {
+                <option [value]="hour">
+                  {{hour < 10 ? '0' + hour : hour}}:00
+                </option>
+              }
+            </select>
+            @if (selectedHour !== null) {
+              <span class="time-display">
+                {{selectedHour < 10 ? '0' + selectedHour : selectedHour}}:00 - {{selectedHour < 9 ? '0' + (selectedHour + 1) : selectedHour + 1}}:00
+              </span>
+            }
+          </div>
         </div>
-      </div>
+      }
 
       <button
         class="btn predict-btn"
         [disabled]="!selectedAgent || !selectedDate || isPredicting || !canPredict || (selectedAgent.predictionScale === 'HOURLY' && selectedHour === null)"
         (click)="predict()">
-        <span *ngIf="!isPredicting">Predict</span>
-        <span *ngIf="isPredicting">Predicting...</span>
+        @if (!isPredicting) {
+          <span>Predict</span>
+        } @else {
+          <span>Predicting...</span>
+        }
       </button>
-      <p *ngIf="selectedAgent && !canPredict" class="training-warning">
-        ⚠️ Agent is still in training
-      </p>
+      @if (selectedAgent && !canPredict) {
+        <p class="training-warning">
+          ⚠️ Agent is still in training
+        </p>
+      }
     </div>
 
     <!-- Error Message -->
-    <div *ngIf="errorMessage" class="error-banner">
-      {{errorMessage}}
-      <button class="close-error" (click)="errorMessage = ''">&times;</button>
-    </div>
+    @if (errorMessage) {
+      <div class="error-banner">
+        {{errorMessage}}
+        <button class="close-error" (click)="errorMessage = ''">&times;</button>
+      </div>
+    }
 
     <!-- Prediction Results Section -->
-    <div class="results-section" *ngIf="selectedPrediction">
-      <div class="results-header">
-        <div class="results-header-left">
-          <span class="prediction-date-label">Prediction Date: </span>
-          <span class="prediction-date-value">{{selectedPrediction.predictionDate}}</span>
-        </div>
-        <!-- Toggle View Mode Button -->
-        <button
-          class="view-toggle-btn"
-          (click)="toggleChartViewMode()"
-          *ngIf="hasActualMarketData()">
-          <span *ngIf="chartViewMode === 'combined'">📊 Separate View</span>
-          <span *ngIf="chartViewMode === 'separate'">📈 Combined View</span>
-        </button>
-      </div>
-
-      <!-- Combined View Mode -->
-      <div class="charts-container" *ngIf="chartViewMode === 'combined'">
-        <div class="chart-card full-width">
-          <h4>Prediction vs Actual Market</h4>
-          <div class="chart-legend">
-            <span class="legend-item prediction">━ Prediction</span>
-            <span class="legend-item actual" *ngIf="hasActualMarketData()">┅ Actual Market</span>
+    @if (selectedPrediction) {
+      <div class="results-section">
+        <div class="results-header">
+          <div class="results-header-left">
+            <span class="prediction-date-label">Prediction Date: </span>
+            <span class="prediction-date-value">{{selectedPrediction.predictionDate}}</span>
           </div>
-          <canvas #predictionCanvas width="700" height="300"></canvas>
-          <p class="no-actual-data" *ngIf="!hasActualMarketData()">
-            Actual market data not yet available (prediction is in the future)
-          </p>
+          <!-- Toggle View Mode Button -->
+          @if (hasActualMarketData()) {
+            <button
+              class="view-toggle-btn"
+              (click)="toggleChartViewMode()">
+              @if (chartViewMode === 'combined') {
+                <span>📊 Separate View</span>
+              } @else {
+                <span>📈 Combined View</span>
+              }
+            </button>
+          }
         </div>
-      </div>
 
-      <!-- Separate View Mode -->
-      <div class="charts-container separate" *ngIf="chartViewMode === 'separate'">
-        <div class="chart-card">
-          <h4>Prediction</h4>
-          <canvas #predictionCanvas width="350" height="250"></canvas>
-        </div>
-        <div class="chart-card" *ngIf="hasActualMarketData()">
-          <h4>Actual Market ({{selectedAgent?.targetMarket}})</h4>
-          <canvas #marketCanvas width="350" height="250"></canvas>
-        </div>
+        <!-- Combined View Mode -->
+        @if (chartViewMode === 'combined') {
+          <div class="charts-container">
+            <div class="chart-card full-width">
+              <h4>Prediction vs Actual Market</h4>
+              <div class="chart-legend">
+                <span class="legend-item prediction">━ Prediction</span>
+                @if (hasActualMarketData()) {
+                  <span class="legend-item actual">┅ Actual Market</span>
+                }
+              </div>
+              <canvas #predictionCanvas width="700" height="300"></canvas>
+              @if (!hasActualMarketData()) {
+                <p class="no-actual-data">
+                  Actual market data not yet available (prediction is in the future)
+                </p>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Separate View Mode -->
+        @if (chartViewMode === 'separate') {
+          <div class="charts-container separate">
+            <div class="chart-card">
+              <h4>Prediction</h4>
+              <canvas #predictionCanvas width="350" height="250"></canvas>
+            </div>
+            @if (hasActualMarketData()) {
+              <div class="chart-card">
+                <h4>Actual Market ({{selectedAgent?.targetMarket}})</h4>
+                <canvas #marketCanvas width="350" height="250"></canvas>
+              </div>
+            }
+          </div>
+        }
       </div>
-    </div>
+    }
 
     <!-- Agent Parameters Section -->
-    <div class="parameters-section" *ngIf="selectedAgent">
-      <h4>{{selectedAgent.name || selectedAgent.targetMarket}} Parameters:</h4>
-      <div class="parameters-content">
-        <div class="param-group">
-          <div class="param-item">
-            <span class="param-label">Agent ID:</span>
-            <span class="param-value agent-id">#{{selectedAgent.id}}</span>
-          </div>
-          <div class="param-item">
-            <span class="param-label">Target Market:</span>
-            <span class="param-value">{{selectedAgent.targetMarket}}</span>
-          </div>
-          <div class="param-item">
-            <span class="param-label">Status:</span>
-            <span class="param-value" [ngClass]="getStatusClass(selectedAgent.trainingStatus)">
-              {{getStatusLabel(selectedAgent.trainingStatus)}}
-            </span>
-          </div>
-        </div>
-        <div class="param-group">
-          <h5>Prediction Settings</h5>
-          <div class="param-item">
-            <span class="param-label">Prediction Scale:</span>
-            <span class="param-value prediction-scale">{{selectedAgent.predictionScale}}</span>
-          </div>
-          <div class="param-item">
-            <span class="param-label">Frequency:</span>
-            <span class="param-value">{{selectedAgent.frequency}}</span>
-          </div>
-        </div>
-        <div class="param-group">
-          <h5>Input Protocol</h5>
-          <div class="param-item">
-            <span class="param-label">Time Range:</span>
-            <span class="param-value">{{selectedAgent.inputStartTime}} - {{selectedAgent.inputEndTime}}</span>
-          </div>
-          <div class="param-item">
-            <span class="param-label">Frequency:</span>
-            <span class="param-value">{{selectedAgent.inputFrequency}} min</span>
-          </div>
-        </div>
-        <div class="param-group">
-          <h5>Output Protocol</h5>
-          <div class="param-item">
-            <span class="param-label">Time Range:</span>
-            <span class="param-value">{{selectedAgent.outputStartTime}} - {{selectedAgent.outputEndTime}}</span>
-          </div>
-          <div class="param-item">
-            <span class="param-label">Frequency:</span>
-            <span class="param-value">{{selectedAgent.outputFrequency}} min</span>
-          </div>
-        </div>
-        <!-- Features with Parameters -->
-        <div class="param-group features-group" *ngIf="selectedAgent.agentFeatures && selectedAgent.agentFeatures.length > 0">
-          <h5>Features</h5>
-          <div *ngFor="let feature of selectedAgent.agentFeatures" class="feature-card">
-            <div class="feature-header-card">
-              <span class="feature-name">{{feature.featureName}}</span>
-              <span class="feature-description" *ngIf="feature.featureDescription">{{feature.featureDescription}}</span>
+    @if (selectedAgent) {
+      <div class="parameters-section">
+        <h4>{{selectedAgent.name || selectedAgent.targetMarket}} Parameters:</h4>
+        <div class="parameters-content">
+          <div class="param-group">
+            <div class="param-item">
+              <span class="param-label">Agent ID:</span>
+              <span class="param-value agent-id">#{{selectedAgent.id}}</span>
             </div>
-            <div class="feature-parameters" *ngIf="feature.parameters && feature.parameters.length > 0">
-              <div *ngFor="let param of feature.parameters" class="feature-param">
-                <span class="feature-param-name">{{param.name}}:</span>
-                <span class="feature-param-value">{{param.value}}</span>
-                <span class="feature-param-type">({{param.type}})</span>
-              </div>
+            <div class="param-item">
+              <span class="param-label">Target Market:</span>
+              <span class="param-value">{{selectedAgent.targetMarket}}</span>
+            </div>
+            <div class="param-item">
+              <span class="param-label">Status:</span>
+              <span class="param-value" [ngClass]="getStatusClass(selectedAgent.trainingStatus)">
+                {{getStatusLabel(selectedAgent.trainingStatus)}}
+              </span>
             </div>
           </div>
+          <div class="param-group">
+            <h5>Prediction Settings</h5>
+            <div class="param-item">
+              <span class="param-label">Prediction Scale:</span>
+              <span class="param-value prediction-scale">{{selectedAgent.predictionScale}}</span>
+            </div>
+            <div class="param-item">
+              <span class="param-label">Frequency:</span>
+              <span class="param-value">{{selectedAgent.frequency}}</span>
+            </div>
+          </div>
+          <div class="param-group">
+            <h5>Input Protocol</h5>
+            <div class="param-item">
+              <span class="param-label">Time Range:</span>
+              <span class="param-value">{{selectedAgent.inputStartTime}} - {{selectedAgent.inputEndTime}}</span>
+            </div>
+            <div class="param-item">
+              <span class="param-label">Frequency:</span>
+              <span class="param-value">{{selectedAgent.inputFrequency}} min</span>
+            </div>
+          </div>
+          <div class="param-group">
+            <h5>Output Protocol</h5>
+            <div class="param-item">
+              <span class="param-label">Time Range:</span>
+              <span class="param-value">{{selectedAgent.outputStartTime}} - {{selectedAgent.outputEndTime}}</span>
+            </div>
+            <div class="param-item">
+              <span class="param-label">Frequency:</span>
+              <span class="param-value">{{selectedAgent.outputFrequency}} min</span>
+            </div>
+          </div>
+          <!-- Features with Parameters -->
+          @if (selectedAgent.agentFeatures && selectedAgent.agentFeatures.length > 0) {
+            <div class="param-group features-group">
+              <h5>Features</h5>
+              @for (feature of selectedAgent.agentFeatures; track feature.id) {
+                <div class="feature-card">
+                  <div class="feature-header-card">
+                    <span class="feature-name">{{feature.featureName}}</span>
+                    @if (feature.featureDescription) {
+                      <span class="feature-description">{{feature.featureDescription}}</span>
+                    }
+                  </div>
+                  @if (feature.parameters && feature.parameters.length > 0) {
+                    <div class="feature-parameters">
+                      @for (param of feature.parameters; track param.id) {
+                        <div class="feature-param">
+                          <span class="feature-param-name">{{param.name}}:</span>
+                          <span class="feature-param-value">{{param.value}}</span>
+                          <span class="feature-param-type">({{param.type}})</span>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
         </div>
       </div>
-    </div>
+    }
   </main>
 
   <!-- Right Sidebar - Agents -->
@@ -264,25 +327,32 @@
         <h3>Ready Agents</h3>
       </div>
       <div class="sidebar-content">
-        <div *ngIf="isLoadingAgents" class="loading-state">
-          <div class="spinner"></div>
-        </div>
-        <div *ngIf="!isLoadingAgents && readyAgents.length === 0" class="empty-state">
-          <p>No ready agents</p>
-        </div>
-        <ul class="agent-list" *ngIf="readyAgents.length > 0">
-          <li
-            *ngFor="let agent of readyAgents"
-            class="agent-item"
-            [class.selected]="selectedAgent?.id === agent.id"
-            (click)="selectAgent(agent)">
-            <div class="agent-info">
-              <span class="agent-name">{{agent.name || 'Agent #' + agent.id}}</span>
-              <span class="agent-id-badge">#{{agent.id}}</span>
-            </div>
-            <span class="agent-market">{{agent.targetMarket}}</span>
-          </li>
-        </ul>
+        @if (isLoadingAgents) {
+          <div class="loading-state">
+            <div class="spinner"></div>
+          </div>
+        }
+        @if (!isLoadingAgents && readyAgents.length === 0) {
+          <div class="empty-state">
+            <p>No ready agents</p>
+          </div>
+        }
+        @if (readyAgents.length > 0) {
+          <ul class="agent-list">
+            @for (agent of readyAgents; track agent.id) {
+              <li
+                class="agent-item"
+                [class.selected]="selectedAgent?.id === agent.id"
+                (click)="selectAgent(agent)">
+                <div class="agent-info">
+                  <span class="agent-name">{{agent.name || 'Agent #' + agent.id}}</span>
+                  <span class="agent-id-badge">#{{agent.id}}</span>
+                </div>
+                <span class="agent-market">{{agent.targetMarket}}</span>
+              </li>
+            }
+          </ul>
+        }
       </div>
     </div>
 
@@ -291,24 +361,29 @@
         <h3>Agent en Construction</h3>
       </div>
       <div class="sidebar-content">
-        <div *ngIf="!isLoadingAgents && inConstructionAgents.length === 0" class="empty-state">
-          <p>No agents in training</p>
-        </div>
-        <ul class="agent-list" *ngIf="inConstructionAgents.length > 0">
-          <li
-            *ngFor="let agent of inConstructionAgents"
-            class="agent-item in-construction"
-            [class.selected]="selectedAgent?.id === agent.id"
-            (click)="selectAgent(agent)">
-            <div class="agent-info">
-              <span class="agent-name">{{agent.name || 'Agent #' + agent.id}}</span>
-              <span class="agent-id-badge">#{{agent.id}}</span>
-            </div>
-            <span class="agent-status" [ngClass]="getStatusClass(agent.trainingStatus)">
-              {{getStatusLabel(agent.trainingStatus)}}
-            </span>
-          </li>
-        </ul>
+        @if (!isLoadingAgents && inConstructionAgents.length === 0) {
+          <div class="empty-state">
+            <p>No agents in training</p>
+          </div>
+        }
+        @if (inConstructionAgents.length > 0) {
+          <ul class="agent-list">
+            @for (agent of inConstructionAgents; track agent.id) {
+              <li
+                class="agent-item in-construction"
+                [class.selected]="selectedAgent?.id === agent.id"
+                (click)="selectAgent(agent)">
+                <div class="agent-info">
+                  <span class="agent-name">{{agent.name || 'Agent #' + agent.id}}</span>
+                  <span class="agent-id-badge">#{{agent.id}}</span>
+                </div>
+                <span class="agent-status" [ngClass]="getStatusClass(agent.trainingStatus)">
+                  {{getStatusLabel(agent.trainingStatus)}}
+                </span>
+              </li>
+            }
+          </ul>
+        }
       </div>
     </div>
   </aside>

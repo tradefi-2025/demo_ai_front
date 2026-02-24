@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MARKETS_LIST } from "../shared/data/const-market-list";
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FeatureService } from '../services/feature.service';
 import { Feature } from "../models/API/feature";
 import { AgentService } from '../services/agent.service';
@@ -11,6 +11,8 @@ import { startWith } from "rxjs/operators";
 
 @Component({
   selector: 'app-nouveau-agent',
+  standalone: true,
+  imports: [ReactiveFormsModule],
   templateUrl: './nouveau-agent.component.html',
   styleUrls: ['./nouveau-agent.component.css']
 })

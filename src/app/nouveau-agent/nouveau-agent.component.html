@@ -7,9 +7,11 @@
       <div class="form-control">
         <label for="agentName">Agent Name</label>
         <input id="agentName" formControlName="agentName" type="text" placeholder="Name your AI agent">
-        <div *ngIf="myForm.get('agentName')?.invalid && myForm.get('agentName')?.touched" class="error-message">
-          Agent name is required
-        </div>
+        @if (myForm.get('agentName')?.invalid && myForm.get('agentName')?.touched) {
+          <div class="error-message">
+            Agent name is required
+          </div>
+        }
       </div>
     </div>
 
@@ -17,7 +19,9 @@
     <div class="form-section">
       <label for="markets">Target Markets:</label>
       <select formControlName="targetMarket" id="markets" name="Target Market">
-        <option *ngFor="let market of marketLists" [value]="market">{{market}}</option>
+        @for (market of marketLists; track market) {
+          <option [value]="market">{{market}}</option>
+        }
       </select>
     </div>
 
@@ -25,28 +29,34 @@
     <div formGroupName="features" class="features-section">
       <h3>Features:</h3>
 
-      <div *ngFor="let feature of featureLists" class="feature-item">
-        <div class="feature-header">
-          <label [for]="'feature-' + feature.name">{{feature.name}}</label>
-          <input
-            [id]="'feature-' + feature.name"
-            type="checkbox"
-            [checked]="isFeatureSelected(feature.name)"
-            (change)="addOuRemoveFeature(feature.name)">
-        </div>
-
-        <div *ngIf="isFeatureSelected(feature.name)" class="feature-params">
-          <div [formGroupName]="feature.name">
-            <div *ngFor="let param of getParamKeys(feature)" class="param-item">
-              <label [for]="feature.name + '-' + param">{{param}}</label>
-              <input
-                [id]="feature.name + '-' + param"
-                type="text"
-                [formControlName]="param">
-            </div>
+      @for (feature of featureLists; track feature.name) {
+        <div class="feature-item">
+          <div class="feature-header">
+            <label [for]="'feature-' + feature.name">{{feature.name}}</label>
+            <input
+              [id]="'feature-' + feature.name"
+              type="checkbox"
+              [checked]="isFeatureSelected(feature.name)"
+              (change)="addOuRemoveFeature(feature.name)">
           </div>
+
+          @if (isFeatureSelected(feature.name)) {
+            <div class="feature-params">
+              <div [formGroupName]="feature.name">
+                @for (param of getParamKeys(feature); track param) {
+                  <div class="param-item">
+                    <label [for]="feature.name + '-' + param">{{param}}</label>
+                    <input
+                      [id]="feature.name + '-' + param"
+                      type="text"
+                      [formControlName]="param">
+                  </div>
+                }
+              </div>
+            </div>
+          }
         </div>
-      </div>
+      }
     </div>
 
     <div class="form-section time-protocol">
@@ -54,196 +64,270 @@
       <div>
         <select formControlName="predictionScale" id="predictionScale" name="predictionScale">
           <option value="">-- Select --</option>
-          <option *ngFor="let scale of predictionScales" [value]="scale.value">
-            {{ scale.label }}
-          </option>
+          @for (scale of predictionScales; track scale.value) {
+            <option [value]="scale.value">
+              {{ scale.label }}
+            </option>
+          }
         </select>
       </div>
     </div>
 
     <!-- frequency sector - affiché seulement si predictionScale est sélectionné -->
-    <div class="form-section time-protocol" *ngIf="filteredFrequencies.length > 0">
-      <h3>Frequency</h3>
-      <div>
-        <select formControlName="frequency" id="frequency" name="frequency">
-          <option value="">-- Select --</option>
-          <option *ngFor="let freq of filteredFrequencies" [value]="freq.value">
-            {{ freq.label }}
-          </option>
-        </select>
+    @if (filteredFrequencies.length > 0) {
+      <div class="form-section time-protocol">
+        <h3>Frequency</h3>
+        <div>
+          <select formControlName="frequency" id="frequency" name="frequency">
+            <option value="">-- Select --</option>
+            @for (freq of filteredFrequencies; track freq.value) {
+              <option [value]="freq.value">
+                {{ freq.label }}
+              </option>
+            }
+          </select>
+        </div>
       </div>
-    </div>
+    }
 
 
 
     <!-- Time Protocols - affiché seulement si frequency et predictionScale sont sélectionnés -->
-    <div class="form-section" *ngIf="showInputSection">
-      <!-- Input Protocol -->
-      <div class="time-protocol">
-        <h3>Input Time Protocol:</h3>
+    @if (showInputSection) {
+      <div class="form-section">
+        <!-- Input Protocol -->
+        <div class="time-protocol">
+          <h3>Input Time Protocol:</h3>
 
-        <!-- Input Start -->
-        <div class="time-row">
-          <h4>Start:</h4>
-          <div class="time-controls">
-            <!-- Week -->
-            <div *ngIf="hasLevel('WEEK')">
-              <label for="inputStartWeek">Week</label>
-              <select formControlName="inputStartWeek" id="inputStartWeek">
-                <option value="">-- Select --</option>
-                <option *ngFor="let w of inputWeeks" [value]="w.value">{{ w.label }}</option>
-              </select>
+          <!-- Input Start -->
+          <div class="time-row">
+            <h4>Start:</h4>
+            <div class="time-controls">
+              <!-- Week -->
+              @if (hasLevel('WEEK')) {
+                <div>
+                  <label for="inputStartWeek">Week</label>
+                  <select formControlName="inputStartWeek" id="inputStartWeek">
+                    <option value="">-- Select --</option>
+                    @for (w of inputWeeks; track w.value) {
+                      <option [value]="w.value">{{ w.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <!-- Day -->
+              @if (hasLevel('DAY')) {
+                <div>
+                  <label for="inputStartDay">Day</label>
+                  <select formControlName="inputStartDay" id="inputStartDay">
+                    <option value="">-- Select --</option>
+                    @for (d of inputDays; track d.value) {
+                      <option [value]="d.value">{{ d.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <!-- Hour -->
+              @if (hasLevel('HOUR')) {
+                <div>
+                  <label for="inputStartHour">Hour</label>
+                  <select formControlName="inputStartHour" id="inputStartHour">
+                    <option value="">-- Select --</option>
+                    @for (h of inputHours; track h.value) {
+                      <option [value]="h.value">{{ h.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <!-- Minute -->
+              @if (hasLevel('MINUTE')) {
+                <div>
+                  <label for="inputStartMinute">Minute</label>
+                  <select formControlName="inputStartMinute" id="inputStartMinute">
+                    <option value="">-- Select --</option>
+                    @for (m of inputMinutes; track m.value) {
+                      <option [value]="m.value">{{ m.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
             </div>
-            <!-- Day -->
-            <div *ngIf="hasLevel('DAY')">
-              <label for="inputStartDay">Day</label>
-              <select formControlName="inputStartDay" id="inputStartDay">
-                <option value="">-- Select --</option>
-                <option *ngFor="let d of inputDays" [value]="d.value">{{ d.label }}</option>
-              </select>
-            </div>
-            <!-- Hour -->
-            <div *ngIf="hasLevel('HOUR')">
-              <label for="inputStartHour">Hour</label>
-              <select formControlName="inputStartHour" id="inputStartHour">
-                <option value="">-- Select --</option>
-                <option *ngFor="let h of inputHours" [value]="h.value">{{ h.label }}</option>
-              </select>
-            </div>
-            <!-- Minute -->
-            <div *ngIf="hasLevel('MINUTE')">
-              <label for="inputStartMinute">Minute</label>
-              <select formControlName="inputStartMinute" id="inputStartMinute">
-                <option value="">-- Select --</option>
-                <option *ngFor="let m of inputMinutes" [value]="m.value">{{ m.label }}</option>
-              </select>
+          </div>
+
+          <!-- Input End -->
+          <div class="time-row">
+            <h4>End:</h4>
+            <div class="time-controls">
+              <!-- Week -->
+              @if (hasLevel('WEEK')) {
+                <div>
+                  <label for="inputEndWeek">Week</label>
+                  <select formControlName="inputEndWeek" id="inputEndWeek">
+                    <option value="">-- Select --</option>
+                    @for (w of getFilteredInputEndWeeks(); track w.value) {
+                      <option [value]="w.value">{{ w.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <!-- Day -->
+              @if (hasLevel('DAY')) {
+                <div>
+                  <label for="inputEndDay">Day</label>
+                  <select formControlName="inputEndDay" id="inputEndDay">
+                    <option value="">-- Select --</option>
+                    @for (d of getFilteredInputEndDays(); track d.value) {
+                      <option [value]="d.value">{{ d.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <!-- Hour -->
+              @if (hasLevel('HOUR')) {
+                <div>
+                  <label for="inputEndHour">Hour</label>
+                  <select formControlName="inputEndHour" id="inputEndHour">
+                    <option value="">-- Select --</option>
+                    @for (h of getFilteredInputEndHours(); track h.value) {
+                      <option [value]="h.value">{{ h.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <!-- Minute -->
+              @if (hasLevel('MINUTE')) {
+                <div>
+                  <label for="inputEndMinute">Minute</label>
+                  <select formControlName="inputEndMinute" id="inputEndMinute">
+                    <option value="">-- Select --</option>
+                    @for (m of getFilteredInputEndMinutes(); track m.value) {
+                      <option [value]="m.value">{{ m.label }}</option>
+                    }
+                  </select>
+                </div>
+              }
             </div>
           </div>
         </div>
 
-        <!-- Input End -->
-        <div class="time-row">
-          <h4>End:</h4>
-          <div class="time-controls">
-            <!-- Week -->
-            <div *ngIf="hasLevel('WEEK')">
-              <label for="inputEndWeek">Week</label>
-              <select formControlName="inputEndWeek" id="inputEndWeek">
-                <option value="">-- Select --</option>
-                <option *ngFor="let w of getFilteredInputEndWeeks()" [value]="w.value">{{ w.label }}</option>
-              </select>
+        <!-- Output Protocol - affiché seulement si input est rempli -->
+        @if (showOutputSection) {
+          <div class="time-protocol">
+            <h3>Output Time Protocol:</h3>
+
+            <!-- Output Start -->
+            <div class="time-row">
+              <h4>Start:</h4>
+              <div class="time-controls">
+                <!-- Week -->
+                @if (hasLevel('WEEK')) {
+                  <div>
+                    <label for="outputStartWeek">Week</label>
+                    <select formControlName="outputStartWeek" id="outputStartWeek">
+                      <option value="">-- Select --</option>
+                      @for (w of getFilteredOutputStartWeeks(); track w.value) {
+                        <option [value]="w.value">{{ w.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+                <!-- Day -->
+                @if (hasLevel('DAY')) {
+                  <div>
+                    <label for="outputStartDay">Day</label>
+                    <select formControlName="outputStartDay" id="outputStartDay">
+                      <option value="">-- Select --</option>
+                      @for (d of getFilteredOutputStartDays(); track d.value) {
+                        <option [value]="d.value">{{ d.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+                <!-- Hour -->
+                @if (hasLevel('HOUR')) {
+                  <div>
+                    <label for="outputStartHour">Hour</label>
+                    <select formControlName="outputStartHour" id="outputStartHour">
+                      <option value="">-- Select --</option>
+                      @for (h of getFilteredOutputStartHours(); track h.value) {
+                        <option [value]="h.value">{{ h.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+                <!-- Minute -->
+                @if (hasLevel('MINUTE')) {
+                  <div>
+                    <label for="outputStartMinute">Minute</label>
+                    <select formControlName="outputStartMinute" id="outputStartMinute">
+                      <option value="">-- Select --</option>
+                      @for (m of getFilteredOutputStartMinutes(); track m.value) {
+                        <option [value]="m.value">{{ m.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+              </div>
             </div>
-            <!-- Day -->
-            <div *ngIf="hasLevel('DAY')">
-              <label for="inputEndDay">Day</label>
-              <select formControlName="inputEndDay" id="inputEndDay">
-                <option value="">-- Select --</option>
-                <option *ngFor="let d of getFilteredInputEndDays()" [value]="d.value">{{ d.label }}</option>
-              </select>
-            </div>
-            <!-- Hour -->
-            <div *ngIf="hasLevel('HOUR')">
-              <label for="inputEndHour">Hour</label>
-              <select formControlName="inputEndHour" id="inputEndHour">
-                <option value="">-- Select --</option>
-                <option *ngFor="let h of getFilteredInputEndHours()" [value]="h.value">{{ h.label }}</option>
-              </select>
-            </div>
-            <!-- Minute -->
-            <div *ngIf="hasLevel('MINUTE')">
-              <label for="inputEndMinute">Minute</label>
-              <select formControlName="inputEndMinute" id="inputEndMinute">
-                <option value="">-- Select --</option>
-                <option *ngFor="let m of getFilteredInputEndMinutes()" [value]="m.value">{{ m.label }}</option>
-              </select>
+
+            <!-- Output End -->
+            <div class="time-row">
+              <h4>End:</h4>
+              <div class="time-controls">
+                <!-- Week -->
+                @if (hasLevel('WEEK')) {
+                  <div>
+                    <label for="outputEndWeek">Week</label>
+                    <select formControlName="outputEndWeek" id="outputEndWeek">
+                      <option value="">-- Select --</option>
+                      @for (w of getFilteredOutputEndWeeks(); track w.value) {
+                        <option [value]="w.value">{{ w.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+                <!-- Day -->
+                @if (hasLevel('DAY')) {
+                  <div>
+                    <label for="outputEndDay">Day</label>
+                    <select formControlName="outputEndDay" id="outputEndDay">
+                      <option value="">-- Select --</option>
+                      @for (d of getFilteredOutputEndDays(); track d.value) {
+                        <option [value]="d.value">{{ d.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+                <!-- Hour -->
+                @if (hasLevel('HOUR')) {
+                  <div>
+                    <label for="outputEndHour">Hour</label>
+                    <select formControlName="outputEndHour" id="outputEndHour">
+                      <option value="">-- Select --</option>
+                      @for (h of getFilteredOutputEndHours(); track h.value) {
+                        <option [value]="h.value">{{ h.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+                <!-- Minute -->
+                @if (hasLevel('MINUTE')) {
+                  <div>
+                    <label for="outputEndMinute">Minute</label>
+                    <select formControlName="outputEndMinute" id="outputEndMinute">
+                      <option value="">-- Select --</option>
+                      @for (m of getFilteredOutputEndMinutes(); track m.value) {
+                        <option [value]="m.value">{{ m.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+              </div>
             </div>
           </div>
-        </div>
+        }
       </div>
-
-      <!-- Output Protocol - affiché seulement si input est rempli -->
-      <div class="time-protocol" *ngIf="showOutputSection">
-        <h3>Output Time Protocol:</h3>
-
-        <!-- Output Start -->
-        <div class="time-row">
-          <h4>Start:</h4>
-          <div class="time-controls">
-            <!-- Week -->
-            <div *ngIf="hasLevel('WEEK')">
-              <label for="outputStartWeek">Week</label>
-              <select formControlName="outputStartWeek" id="outputStartWeek">
-                <option value="">-- Select --</option>
-                <option *ngFor="let w of getFilteredOutputStartWeeks()" [value]="w.value">{{ w.label }}</option>
-              </select>
-            </div>
-            <!-- Day -->
-            <div *ngIf="hasLevel('DAY')">
-              <label for="outputStartDay">Day</label>
-              <select formControlName="outputStartDay" id="outputStartDay">
-                <option value="">-- Select --</option>
-                <option *ngFor="let d of getFilteredOutputStartDays()" [value]="d.value">{{ d.label }}</option>
-              </select>
-            </div>
-            <!-- Hour -->
-            <div *ngIf="hasLevel('HOUR')">
-              <label for="outputStartHour">Hour</label>
-              <select formControlName="outputStartHour" id="outputStartHour">
-                <option value="">-- Select --</option>
-                <option *ngFor="let h of getFilteredOutputStartHours()" [value]="h.value">{{ h.label }}</option>
-              </select>
-            </div>
-            <!-- Minute -->
-            <div *ngIf="hasLevel('MINUTE')">
-              <label for="outputStartMinute">Minute</label>
-              <select formControlName="outputStartMinute" id="outputStartMinute">
-                <option value="">-- Select --</option>
-                <option *ngFor="let m of getFilteredOutputStartMinutes()" [value]="m.value">{{ m.label }}</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <!-- Output End -->
-        <div class="time-row">
-          <h4>End:</h4>
-          <div class="time-controls">
-            <!-- Week -->
-            <div *ngIf="hasLevel('WEEK')">
-              <label for="outputEndWeek">Week</label>
-              <select formControlName="outputEndWeek" id="outputEndWeek">
-                <option value="">-- Select --</option>
-                <option *ngFor="let w of getFilteredOutputEndWeeks()" [value]="w.value">{{ w.label }}</option>
-              </select>
-            </div>
-            <!-- Day -->
-            <div *ngIf="hasLevel('DAY')">
-              <label for="outputEndDay">Day</label>
-              <select formControlName="outputEndDay" id="outputEndDay">
-                <option value="">-- Select --</option>
-                <option *ngFor="let d of getFilteredOutputEndDays()" [value]="d.value">{{ d.label }}</option>
-              </select>
-            </div>
-            <!-- Hour -->
-            <div *ngIf="hasLevel('HOUR')">
-              <label for="outputEndHour">Hour</label>
-              <select formControlName="outputEndHour" id="outputEndHour">
-                <option value="">-- Select --</option>
-                <option *ngFor="let h of getFilteredOutputEndHours()" [value]="h.value">{{ h.label }}</option>
-              </select>
-            </div>
-            <!-- Minute -->
-            <div *ngIf="hasLevel('MINUTE')">
-              <label for="outputEndMinute">Minute</label>
-              <select formControlName="outputEndMinute" id="outputEndMinute">
-                <option value="">-- Select --</option>
-                <option *ngFor="let m of getFilteredOutputEndMinutes()" [value]="m.value">{{ m.label }}</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    }
 
     <!-- Submit Button -->
     <button class="btn" type="submit" [disabled]="myForm.invalid">Create AI Agent</button>

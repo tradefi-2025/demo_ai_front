@@ -1,4 +1,5 @@
 import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
+import { NgClass } from '@angular/common';
 import { AgentService } from '../services/agent.service';
 import { PredictionService } from '../services/prediction.service';
 import { AgentsPerUserResponse, AgentStatus } from '../models/reponse/agent-response';
@@ -6,6 +7,8 @@ import { PredictionResponse } from '../models/reponse/prediction-response';
 
 @Component({
   selector: 'app-agent-dashboard',
+  standalone: true,
+  imports: [NgClass],
   templateUrl: './agent-dashboard.component.html',
   styleUrls: ['./agent-dashboard.component.css']
 })
