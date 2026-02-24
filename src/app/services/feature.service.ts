@@ -10,15 +10,15 @@ import {Observable, tap} from "rxjs";
 export class FeatureService {
 
   features!: FeatureInDto;
-  
+
   private readonly baseUrl = environment.apiUrl;
 
     constructor(private readonly http: HttpClient) {
   }
 
-getFeatures(): Observable<FeatureInDto>{
-    return this.http.get<FeatureInDto>(this.baseUrl+"/features", {
-      withCredentials : true
-    });
-}
+  getFeatures(): Observable<FeatureInDto>{
+      return this.http.get<FeatureInDto>(this.baseUrl+"/feature/getAll", {
+        withCredentials : true
+      });
+  }
 }
