@@ -4,7 +4,7 @@
 
   [[redirects]]
   from = "/api/*"
-  to = "https://fikingtrader-slnnd.ondigitalocean.app/api/:splat"
+  to = "https://stratify-playground-slnnd.ondigitalocean.app/api/:splat"
   status = 200
   force = true
 
