@@ -1,336 +1,135 @@
 <div class="container-fluid">
   <h2>Create New AI Agent</h2>
 
-  <form [formGroup]="myForm" (ngSubmit)="onSubmit()" class="form-group">
-    <!-- Informations de base -->
+  <form [formGroup]="form" (ngSubmit)="onSubmit()">
+
+    <!-- ── Agent Name ───────────────────────────────────── -->
     <div class="form-section">
       <div class="form-control">
         <label for="agentName">Agent Name</label>
-        <input id="agentName" formControlName="agentName" type="text" placeholder="Name your AI agent">
-        @if (myForm.get('agentName')?.invalid && myForm.get('agentName')?.touched) {
-          <div class="error-message">
-            Agent name is required
-          </div>
+        <input
+          id="agentName"
+          type="text"
+          formControlName="agentName"
+          placeholder="Name your AI agent">
+        @if (agentName.invalid && agentName.touched) {
+          <span class="error-message">Agent name is required</span>
         }
       </div>
     </div>
 
-    <!-- Target Markets -->
-    <div class="form-section">
-      <label for="markets">Target Markets:</label>
-      <select formControlName="targetMarket" id="markets" name="Target Market">
-        @for (market of marketLists; track market) {
-          <option [value]="market">{{market}}</option>
-        }
-      </select>
-    </div>
-
-    <!-- Features Section -->
+    <!-- ── Downstream Tasks ────────────────────────────── -->
     <div formGroupName="features" class="features-section">
-      <h3>Features:</h3>
+      <h3>Downstream Tasks</h3>
 
-      @for (feature of featureLists; track feature.name) {
+      @for (feature of featureList; track feature.name) {
         <div class="feature-item">
           <div class="feature-header">
-            <label [for]="'feature-' + feature.name">{{feature.name}}</label>
+            <div class="feature-heading">
+              <div class="feature-title-row">
+                <label [for]="'cb-' + feature.name">{{ feature.name }}</label>
+                @if (getFeatureDescription(feature)) {
+                  <button
+                    class="info-trigger"
+                    type="button"
+                    [attr.aria-label]="'About ' + feature.name"
+                  >
+                    i
+                    <span class="info-popover">{{ getFeatureDescription(feature) }}</span>
+                  </button>
+                }
+              </div>
+            </div>
             <input
-              [id]="'feature-' + feature.name"
+              class="feature-toggle"
+              [id]="'cb-' + feature.name"
               type="checkbox"
-              [checked]="isFeatureSelected(feature.name)"
-              (change)="addOuRemoveFeature(feature.name)">
+              [checked]="isSelected(feature.name)"
+              (change)="toggleFeature(feature.name)">
           </div>
 
-          @if (isFeatureSelected(feature.name)) {
-            <div class="feature-params">
-              <div [formGroupName]="feature.name">
-                @for (param of getParamKeys(feature); track param) {
-                  <div class="param-item">
-                    <label [for]="feature.name + '-' + param">{{param}}</label>
-                    <input
-                      [id]="feature.name + '-' + param"
-                      type="text"
-                      [formControlName]="param">
+          @if (isSelected(feature.name)) {
+            <div class="feature-params" [formGroupName]="feature.name">
+              <div class="params-grid">
+                @for (entry of getSortedParameterEntries(feature); track entry.key) {
+                  <div class="param-card" [class.param-card-wide]="isSelectParameter(entry.parameter)">
+                    <div class="param-card-header">
+                      <div class="param-title-row">
+                        <label class="param-label" [for]="feature.name + '-' + entry.key">{{ entry.key }}</label>
+                        @if (entry.parameter.description) {
+                          <button
+                            class="info-trigger"
+                            type="button"
+                            [attr.aria-label]="'About ' + entry.key"
+                          >
+                            i
+                            <span class="info-popover">{{ entry.parameter.description }}</span>
+                          </button>
+                        }
+                      </div>
+                      <div class="param-meta">
+                        @if (entry.parameter.required) {
+                          <span class="param-badge param-badge-required">Required</span>
+                        }
+                      </div>
+                    </div>
+
+                    @if (isSelectParameter(entry.parameter)) {
+                      <select [formControlName]="entry.key" [id]="feature.name + '-' + entry.key">
+                        @for (option of getParameterOptions(entry.parameter); track option){
+                          <option [value]="option">{{ option }}</option>
+                        }
+                      </select>
+                    } @else if (isBooleanParameter(entry.parameter)) {
+                      <label class="checkbox-row" [for]="feature.name + '-' + entry.key">
+                        <input
+                          [id]="feature.name + '-' + entry.key"
+                          type="checkbox"
+                          [formControlName]="entry.key"
+                        >
+                        <span>Enable</span>
+                      </label>
+                    } @else {
+                      <input
+                        [id]="feature.name + '-' + entry.key"
+                        [type]="getInputType(entry.parameter)"
+                        [attr.step]="getInputStep(entry.parameter)"
+                        [min]="entry.parameter.minValue"
+                        [max]="entry.parameter.maxValue"
+                        [formControlName]="entry.key"
+                      >
+                    }
+
+                    @if (getParameterControl(feature.name, entry.key).invalid && getParameterControl(feature.name, entry.key).touched) {
+                      @if (getParameterControl(feature.name, entry.key).hasError('required')) {
+                        <span class="error-message">{{ entry.key }} is required</span>
+                      }
+                      @if (getParameterControl(feature.name, entry.key).hasError('min')) {
+                        <span class="error-message">{{ entry.key }} must be greater than or equal to {{ entry.parameter.minValue }}</span>
+                      }
+                      @if (getParameterControl(feature.name, entry.key).hasError('max')) {
+                        <span class="error-message">{{ entry.key }} must be less than or equal to {{ entry.parameter.maxValue }}</span>
+                      }
+                    }
                   </div>
                 }
               </div>
             </div>
           }
+
         </div>
       }
     </div>
 
-    <div class="form-section time-protocol">
-      <h3>Prediction scale</h3>
-      <div>
-        <select formControlName="predictionScale" id="predictionScale" name="predictionScale">
-          <option value="">-- Select --</option>
-          @for (scale of predictionScales; track scale.value) {
-            <option [value]="scale.value">
-              {{ scale.label }}
-            </option>
-          }
-        </select>
-      </div>
-    </div>
-
-    <!-- frequency sector - affiché seulement si predictionScale est sélectionné -->
-    @if (filteredFrequencies.length > 0) {
-      <div class="form-section time-protocol">
-        <h3>Frequency</h3>
-        <div>
-          <select formControlName="frequency" id="frequency" name="frequency">
-            <option value="">-- Select --</option>
-            @for (freq of filteredFrequencies; track freq.value) {
-              <option [value]="freq.value">
-                {{ freq.label }}
-              </option>
-            }
-          </select>
-        </div>
-      </div>
+    <!-- ── Error ────────────────────────────────────────── -->
+    @if (errorMessage) {
+      <p class="error-message">{{ errorMessage }}</p>
     }
 
-
-
-    <!-- Time Protocols - affiché seulement si frequency et predictionScale sont sélectionnés -->
-    @if (showInputSection) {
-      <div class="form-section">
-        <!-- Input Protocol -->
-        <div class="time-protocol">
-          <h3>Input Time Protocol:</h3>
-
-          <!-- Input Start -->
-          <div class="time-row">
-            <h4>Start:</h4>
-            <div class="time-controls">
-              <!-- Week -->
-              @if (hasLevel('WEEK')) {
-                <div>
-                  <label for="inputStartWeek">Week</label>
-                  <select formControlName="inputStartWeek" id="inputStartWeek">
-                    <option value="">-- Select --</option>
-                    @for (w of inputWeeks; track w.value) {
-                      <option [value]="w.value">{{ w.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-              <!-- Day -->
-              @if (hasLevel('DAY')) {
-                <div>
-                  <label for="inputStartDay">Day</label>
-                  <select formControlName="inputStartDay" id="inputStartDay">
-                    <option value="">-- Select --</option>
-                    @for (d of inputDays; track d.value) {
-                      <option [value]="d.value">{{ d.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-              <!-- Hour -->
-              @if (hasLevel('HOUR')) {
-                <div>
-                  <label for="inputStartHour">Hour</label>
-                  <select formControlName="inputStartHour" id="inputStartHour">
-                    <option value="">-- Select --</option>
-                    @for (h of inputHours; track h.value) {
-                      <option [value]="h.value">{{ h.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-              <!-- Minute -->
-              @if (hasLevel('MINUTE')) {
-                <div>
-                  <label for="inputStartMinute">Minute</label>
-                  <select formControlName="inputStartMinute" id="inputStartMinute">
-                    <option value="">-- Select --</option>
-                    @for (m of inputMinutes; track m.value) {
-                      <option [value]="m.value">{{ m.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-            </div>
-          </div>
-
-          <!-- Input End -->
-          <div class="time-row">
-            <h4>End:</h4>
-            <div class="time-controls">
-              <!-- Week -->
-              @if (hasLevel('WEEK')) {
-                <div>
-                  <label for="inputEndWeek">Week</label>
-                  <select formControlName="inputEndWeek" id="inputEndWeek">
-                    <option value="">-- Select --</option>
-                    @for (w of getFilteredInputEndWeeks(); track w.value) {
-                      <option [value]="w.value">{{ w.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-              <!-- Day -->
-              @if (hasLevel('DAY')) {
-                <div>
-                  <label for="inputEndDay">Day</label>
-                  <select formControlName="inputEndDay" id="inputEndDay">
-                    <option value="">-- Select --</option>
-                    @for (d of getFilteredInputEndDays(); track d.value) {
-                      <option [value]="d.value">{{ d.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-              <!-- Hour -->
-              @if (hasLevel('HOUR')) {
-                <div>
-                  <label for="inputEndHour">Hour</label>
-                  <select formControlName="inputEndHour" id="inputEndHour">
-                    <option value="">-- Select --</option>
-                    @for (h of getFilteredInputEndHours(); track h.value) {
-                      <option [value]="h.value">{{ h.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-              <!-- Minute -->
-              @if (hasLevel('MINUTE')) {
-                <div>
-                  <label for="inputEndMinute">Minute</label>
-                  <select formControlName="inputEndMinute" id="inputEndMinute">
-                    <option value="">-- Select --</option>
-                    @for (m of getFilteredInputEndMinutes(); track m.value) {
-                      <option [value]="m.value">{{ m.label }}</option>
-                    }
-                  </select>
-                </div>
-              }
-            </div>
-          </div>
-        </div>
-
-        <!-- Output Protocol - affiché seulement si input est rempli -->
-        @if (showOutputSection) {
-          <div class="time-protocol">
-            <h3>Output Time Protocol:</h3>
-
-            <!-- Output Start -->
-            <div class="time-row">
-              <h4>Start:</h4>
-              <div class="time-controls">
-                <!-- Week -->
-                @if (hasLevel('WEEK')) {
-                  <div>
-                    <label for="outputStartWeek">Week</label>
-                    <select formControlName="outputStartWeek" id="outputStartWeek">
-                      <option value="">-- Select --</option>
-                      @for (w of getFilteredOutputStartWeeks(); track w.value) {
-                        <option [value]="w.value">{{ w.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-                <!-- Day -->
-                @if (hasLevel('DAY')) {
-                  <div>
-                    <label for="outputStartDay">Day</label>
-                    <select formControlName="outputStartDay" id="outputStartDay">
-                      <option value="">-- Select --</option>
-                      @for (d of getFilteredOutputStartDays(); track d.value) {
-                        <option [value]="d.value">{{ d.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-                <!-- Hour -->
-                @if (hasLevel('HOUR')) {
-                  <div>
-                    <label for="outputStartHour">Hour</label>
-                    <select formControlName="outputStartHour" id="outputStartHour">
-                      <option value="">-- Select --</option>
-                      @for (h of getFilteredOutputStartHours(); track h.value) {
-                        <option [value]="h.value">{{ h.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-                <!-- Minute -->
-                @if (hasLevel('MINUTE')) {
-                  <div>
-                    <label for="outputStartMinute">Minute</label>
-                    <select formControlName="outputStartMinute" id="outputStartMinute">
-                      <option value="">-- Select --</option>
-                      @for (m of getFilteredOutputStartMinutes(); track m.value) {
-                        <option [value]="m.value">{{ m.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-              </div>
-            </div>
-
-            <!-- Output End -->
-            <div class="time-row">
-              <h4>End:</h4>
-              <div class="time-controls">
-                <!-- Week -->
-                @if (hasLevel('WEEK')) {
-                  <div>
-                    <label for="outputEndWeek">Week</label>
-                    <select formControlName="outputEndWeek" id="outputEndWeek">
-                      <option value="">-- Select --</option>
-                      @for (w of getFilteredOutputEndWeeks(); track w.value) {
-                        <option [value]="w.value">{{ w.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-                <!-- Day -->
-                @if (hasLevel('DAY')) {
-                  <div>
-                    <label for="outputEndDay">Day</label>
-                    <select formControlName="outputEndDay" id="outputEndDay">
-                      <option value="">-- Select --</option>
-                      @for (d of getFilteredOutputEndDays(); track d.value) {
-                        <option [value]="d.value">{{ d.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-                <!-- Hour -->
-                @if (hasLevel('HOUR')) {
-                  <div>
-                    <label for="outputEndHour">Hour</label>
-                    <select formControlName="outputEndHour" id="outputEndHour">
-                      <option value="">-- Select --</option>
-                      @for (h of getFilteredOutputEndHours(); track h.value) {
-                        <option [value]="h.value">{{ h.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-                <!-- Minute -->
-                @if (hasLevel('MINUTE')) {
-                  <div>
-                    <label for="outputEndMinute">Minute</label>
-                    <select formControlName="outputEndMinute" id="outputEndMinute">
-                      <option value="">-- Select --</option>
-                      @for (m of getFilteredOutputEndMinutes(); track m.value) {
-                        <option [value]="m.value">{{ m.label }}</option>
-                      }
-                    </select>
-                  </div>
-                }
-              </div>
-            </div>
-          </div>
-        }
-      </div>
-    }
-
-    <!-- Submit Button -->
-    <button class="btn" type="submit" [disabled]="myForm.invalid">Create AI Agent</button>
+    <!-- ── Submit ───────────────────────────────────────── -->
+    <button class="btn" type="submit" [disabled]="form.invalid || isSubmitting">
+      {{ isSubmitting ? 'Creating...' : 'Create AI Agent' }}
+    </button>
 
   </form>
 </div>
