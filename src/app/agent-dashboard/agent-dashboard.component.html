@@ -1,55 +1,113 @@
 <div class="dashboard-container">
-  <!-- Left Sidebar - Predictions History -->
-  <aside class="sidebar predictions-sidebar">
+  <aside class="sidebar signals-sidebar">
     <div class="sidebar-header">
-      <h3>Predict History</h3>
+      <div>
+        <p class="sidebar-eyebrow">Signal Center</p>
+        <h3>Signal History</h3>
+      </div>
+
+      <div class="sidebar-tools">
+        <button
+          class="sidebar-tool-btn"
+          type="button"
+          [disabled]="!supportsBrowserNotifications"
+          [class.active]="notificationPermission === 'granted'"
+          [class.warning]="notificationPermission === 'denied'"
+          [attr.aria-label]="notificationButtonLabel"
+          [attr.data-tooltip]="notificationButtonTitle"
+          (click)="requestBrowserNotificationPermission()">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3.5a4 4 0 0 0-4 4v2.1c0 .6-.2 1.1-.5 1.6L6 13.5v1h12v-1l-1.5-2.3c-.3-.5-.5-1-.5-1.6V7.5a4 4 0 0 0-4-4Z" />
+            <path d="M9.5 17.5a2.5 2.5 0 0 0 5 0" />
+          </svg>
+        </button>
+
+        <button
+          class="sidebar-tool-btn"
+          type="button"
+          [disabled]="isRefreshingSignals"
+          [class.loading]="isRefreshingSignals"
+          [attr.aria-label]="refreshSignalsButtonLabel"
+          [attr.data-tooltip]="refreshSignalsButtonTitle"
+          (click)="refreshSignals()">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 6v5h-5" />
+            <path d="M20 11a8 8 0 1 0 2 5.2" />
+          </svg>
+        </button>
+
+        <button
+          class="sidebar-tool-btn"
+          type="button"
+          [class.active]="isAutoFetchEnabled"
+          [attr.aria-label]="autoFetchButtonLabel"
+          [attr.data-tooltip]="autoFetchButtonTitle"
+          (click)="toggleAutoFetch()">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 12h3l2-3 4 6 2-3h3" />
+            <path d="M4 6h16" />
+            <path d="M4 18h16" />
+          </svg>
+        </button>
+      </div>
     </div>
-    <!-- Tabs -->
+
     <div class="tabs">
-      <button
-        class="tab-btn"
-        [class.active]="activeTab === 'all'"
-        (click)="setActiveTab('all')">
-        All
-      </button>
-      <button
-        class="tab-btn"
-        [class.active]="activeTab === 'agent'"
-        (click)="setActiveTab('agent')"
-        [disabled]="!selectedAgent">
-        Agent Specific
-      </button>
+      @for (tab of signalTabs; track tab) {
+        <button
+          class="tab-btn"
+          [class.active]="activeSignalTab === tab"
+          (click)="setActiveSignalTab(tab)">
+          <span>{{ getSignalStatusLabel(tab) }}</span>
+          <span class="tab-count">{{ getSignalCount(tab) }}</span>
+        </button>
+      }
     </div>
+
     <div class="sidebar-content">
-      @if (isLoadingPredictions) {
+      @if (isLoadingSignals) {
         <div class="loading-state">
           <div class="spinner"></div>
-          <p>Loading predictions...</p>
+          <p>Loading signals...</p>
         </div>
       }
-      @if (!isLoadingPredictions && displayedPredictions.length === 0) {
+
+      @if (!isLoadingSignals && filteredSignals.length === 0) {
         <div class="empty-state">
-          @if (activeTab === 'all') {
-            <p>No predictions yet</p>
-          }
-          @if (activeTab === 'agent' && !selectedAgent) {
-            <p>Select an agent first</p>
-          }
-          @if (activeTab === 'agent' && selectedAgent) {
-            <p>No predictions for this agent</p>
-          }
+          <p>No {{ getSignalStatusLabel(activeSignalTab).toLowerCase() }} signals.</p>
         </div>
       }
-      @if (displayedPredictions.length > 0) {
-        <ul class="prediction-list">
-          @for (prediction of displayedPredictions; track prediction.predictionId) {
+
+      @if (!isLoadingSignals && filteredSignals.length > 0) {
+        <ul class="signal-list">
+          @for (signal of filteredSignals; track signal.signalId) {
             <li
-              class="prediction-item"
-              [class.selected]="selectedPrediction?.predictionId === prediction.predictionId"
-              (click)="selectPrediction(prediction)">
-              <span class="prediction-name">Prediction #{{prediction.predictionId}}</span>
-              <span class="prediction-date">{{prediction.predictionDate}}</span>
-              <span class="prediction-agent">({{getAgentNameById(prediction.agentId)}})</span>
+              class="signal-item"
+              [class.selected]="selectedSignal?.signalId === signal.signalId"
+              [class.signal-item-buy]="getSignalTone(signal) === 'buy'"
+              [class.signal-item-sell]="getSignalTone(signal) === 'sell'"
+              [class.signal-item-hold]="getSignalTone(signal) === 'hold'"
+              (click)="selectSignal(signal)">
+              <div class="signal-item-top">
+                <span class="signal-label">{{ getSignalPrimaryLabel(signal) }}</span>
+                <span class="signal-status-pill" [ngClass]="getSignalStatusClass(signal.status)">
+                  {{ getSignalStatusLabel(signal.status) }}
+                </span>
+              </div>
+              <span class="signal-agent">{{ signal.agentName }}</span>
+              <span class="signal-date">{{ signal.signalDate | date:'medium' }}</span>
+              <div class="signal-item-meta">
+                <span class="signal-confidence">
+                  @if (signal.probability !== null) {
+                    {{ signal.probability | percent:'1.0-2' }}
+                  } @else {
+                    --
+                  }
+                </span>
+                @if (signal.warnings?.length) {
+                  <span class="warning-chip">{{ signal.warnings?.length }} warning{{ (signal.warnings?.length ?? 0) > 1 ? 's' : '' }}</span>
+                }
+              </div>
             </li>
           }
         </ul>
@@ -57,298 +115,344 @@
     </div>
   </aside>
 
-  <!-- Main Content - Calendar and Actions -->
   <main class="main-content">
-    <!-- Calendar Section -->
-    <div class="calendar-section">
-      <!-- Agent Scale Info -->
-      @if (selectedAgent) {
-        <div class="scale-info">
-          <span class="scale-label">Prediction Scale:</span>
-          <span class="scale-value">{{selectedAgent.predictionScale}}</span>
-        </div>
-      }
-
-      <!-- Year/Month Selectors -->
-      <div class="date-selectors">
-        <select
-          class="date-select"
-          [value]="currentMonth"
-          (change)="onMonthChange($event)">
-          @for (month of months; track month.value) {
-            <option [value]="month.value">{{month.name}}</option>
-          }
-        </select>
-        <select
-          class="date-select"
-          [value]="currentYear"
-          (change)="onYearChange($event)">
-          @for (year of years; track year) {
-            <option [value]="year">{{year}}</option>
-          }
-        </select>
-      </div>
-      <div class="calendar-header">
-        <button class="calendar-nav" (click)="previousMonth()">&lt;</button>
-        <span class="calendar-title">{{getMonthName()}}</span>
-        <button class="calendar-nav" (click)="nextMonth()">&gt;</button>
-      </div>
-      <div class="calendar-grid">
-        <div class="calendar-weekday">Su</div>
-        <div class="calendar-weekday">Mo</div>
-        <div class="calendar-weekday">Tu</div>
-        <div class="calendar-weekday">We</div>
-        <div class="calendar-weekday">Th</div>
-        <div class="calendar-weekday">Fr</div>
-        <div class="calendar-weekday">Sa</div>
-        @for (dayObj of calendarDays; track $index) {
-          <div
-            class="calendar-day"
-            [class.empty]="dayObj.day === null"
-            [class.selected]="isSelectedDay(dayObj.day)"
-            [class.in-period]="dayObj.isInPeriod"
-            [class.weekend]="dayObj.isWeekend"
-            (click)="selectDay(dayObj.day)">
-            {{dayObj.day}}
-          </div>
-        }
-      </div>
-
-      <!-- Period Label -->
-      @if (getPeriodLabel()) {
-        <div class="period-label">
-          <span class="period-icon">📅</span>
-          <span>{{getPeriodLabel()}}</span>
-        </div>
-      }
-
-      <!-- Hour Selector (for HOURLY scale) - Time Picker Style -->
-      @if (shouldShowHourSelector()) {
-        <div class="time-picker">
-          <label for="hourSelect">🕐 Select Time:</label>
-          <div class="time-picker-controls">
-            <select
-              id="hourSelect"
-              class="time-select"
-              [value]="selectedHour ?? ''"
-              (change)="onHourChange($event)">
-              <option value="" disabled>-- Hour --</option>
-              @for (hour of hours; track hour) {
-                <option [value]="hour">
-                  {{hour < 10 ? '0' + hour : hour}}:00
-                </option>
-              }
-            </select>
-            @if (selectedHour !== null) {
-              <span class="time-display">
-                {{selectedHour < 10 ? '0' + selectedHour : selectedHour}}:00 - {{selectedHour < 9 ? '0' + (selectedHour + 1) : selectedHour + 1}}:00
-              </span>
-            }
-          </div>
-        </div>
-      }
-
-      <button
-        class="btn predict-btn"
-        [disabled]="!selectedAgent || !selectedDate || isPredicting || !canPredict || (selectedAgent.predictionScale === 'HOURLY' && selectedHour === null)"
-        (click)="predict()">
-        @if (!isPredicting) {
-          <span>Predict</span>
-        } @else {
-          <span>Predicting...</span>
-        }
-      </button>
-      @if (selectedAgent && !canPredict) {
-        <p class="training-warning">
-          ⚠️ Agent is still in training
-        </p>
-      }
-    </div>
-
-    <!-- Error Message -->
     @if (errorMessage) {
-      <div class="error-banner">
-        {{errorMessage}}
-        <button class="close-error" (click)="errorMessage = ''">&times;</button>
+      <div class="banner banner-error">
+        <span>{{ errorMessage }}</span>
+        <button class="banner-close" type="button" (click)="dismissErrorMessage()">&times;</button>
       </div>
     }
 
-    <!-- Prediction Results Section -->
-    @if (selectedPrediction) {
-      <div class="results-section">
-        <div class="results-header">
-          <div class="results-header-left">
-            <span class="prediction-date-label">Prediction Date: </span>
-            <span class="prediction-date-value">{{selectedPrediction.predictionDate}}</span>
+    @if (infoMessage) {
+      <div class="banner banner-info">
+        <span>{{ infoMessage }}</span>
+        <button class="banner-close" type="button" (click)="dismissInfoMessage()">&times;</button>
+      </div>
+    }
+
+    <section class="hero-section">
+      <div class="hero-copy">
+        <p class="hero-eyebrow">Agent Workspace</p>
+        <h1>{{ selectedAgentDisplayName }}</h1>
+        @if (selectedAgent) {
+          <p class="hero-description">
+            Launch the agent when it is ready, trigger inference manually while it is active, and monitor the resulting signals below.
+          </p>
+          <div class="hero-meta">
+            <span class="meta-pill">#{{ selectedAgent.id }}</span>
+            <span class="meta-pill" [ngClass]="getAgentStatusClass(selectedAgent)">
+              {{ selectedAgentStatusLabel }}
+            </span>
+            <span class="meta-pill meta-pill-muted">{{ selectedAgentFeatures.length }} features</span>
+            <span class="meta-pill meta-pill-muted">{{ selectedAgentSignalCount }} total signals</span>
+            <span class="meta-pill meta-pill-attention">{{ selectedAgentNewSignalCount }} new</span>
           </div>
-          <!-- Toggle View Mode Button -->
-          @if (hasActualMarketData()) {
+        } @else {
+          <p class="hero-description">
+            Select a ready agent to inspect its configuration and related signal activity.
+          </p>
+        }
+      </div>
+
+      <div class="hero-actions">
+        <div class="hero-action-stack">
+          @if (selectedAgent && !isAgentActive(selectedAgent)) {
             <button
-              class="view-toggle-btn"
-              (click)="toggleChartViewMode()">
-              @if (chartViewMode === 'combined') {
-                <span>📊 Separate View</span>
-              } @else {
-                <span>📈 Combined View</span>
-              }
+              class="primary-btn"
+              type="button"
+              [disabled]="!canLaunchSelectedAgent"
+              (click)="launchSelectedAgent()">
+              Launch Agent
             </button>
           }
+
+          @if (selectedAgent && isAgentActive(selectedAgent)) {
+            <button
+              class="secondary-btn"
+              type="button"
+              [disabled]="!canDeactivateSelectedAgent"
+              (click)="deactivateSelectedAgent()">
+              Deactivate Agent
+            </button>
+          }
+
+          <button
+            class="primary-btn"
+            type="button"
+            [disabled]="!canRequestSignalFromSelectedAgent"
+            (click)="onGenerateSignal()">
+            {{ generateSignalButtonLabel }}
+          </button>
         </div>
 
-        <!-- Combined View Mode -->
-        @if (chartViewMode === 'combined') {
-          <div class="charts-container">
-            <div class="chart-card full-width">
-              <h4>Prediction vs Actual Market</h4>
-              <div class="chart-legend">
-                <span class="legend-item prediction">━ Prediction</span>
-                @if (hasActualMarketData()) {
-                  <span class="legend-item actual">┅ Actual Market</span>
-                }
-              </div>
-              <canvas #predictionCanvas width="700" height="300"></canvas>
-              @if (!hasActualMarketData()) {
-                <p class="no-actual-data">
-                  Actual market data not yet available (prediction is in the future)
-                </p>
-              }
+        <p class="hero-helper">{{ inferenceHelperText }}</p>
+      </div>
+    </section>
+
+    <section class="content-grid">
+      <section class="panel agent-panel">
+        <div class="panel-header">
+          <div>
+            <p class="panel-eyebrow">Agent</p>
+            <h2>Configuration</h2>
+          </div>
+        </div>
+
+        @if (!selectedAgent) {
+          <div class="empty-panel">
+            <p>No agent selected.</p>
+          </div>
+        } @else {
+          <div class="agent-summary-grid">
+            <div class="summary-card">
+              <span class="summary-label">Agent ID</span>
+              <span class="summary-value">#{{ selectedAgent.id }}</span>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Status</span>
+              <span class="summary-value" [ngClass]="getAgentStatusClass(selectedAgent)">
+                {{ selectedAgentStatusLabel }}
+              </span>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Configured features</span>
+              <span class="summary-value">{{ selectedAgentFeatures.length }}</span>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Signals</span>
+              <span class="summary-value">{{ selectedAgentSignalCount }}</span>
             </div>
           </div>
-        }
 
-        <!-- Separate View Mode -->
-        @if (chartViewMode === 'separate') {
-          <div class="charts-container separate">
-            <div class="chart-card">
-              <h4>Prediction</h4>
-              <canvas #predictionCanvas width="350" height="250"></canvas>
+          <div class="feature-stack">
+            @if (selectedAgentFeatures.length === 0) {
+              <div class="empty-panel compact">
+                <p>No dynamic features available for this agent.</p>
+              </div>
+            }
+
+            @for (feature of selectedAgentFeatures; track feature.id) {
+              <article class="feature-card">
+                <div class="feature-card-header">
+                  <div>
+                    <h3>{{ feature.featureName }}</h3>
+                    @if (feature.featureDescription) {
+                      <p>{{ feature.featureDescription }}</p>
+                    }
+                  </div>
+                </div>
+
+                @if (feature.parameters?.length) {
+                  <div class="feature-params-grid">
+                    @for (param of getSortedFeatureParameters(feature); track param.id) {
+                      <div class="feature-param-card">
+                        <div class="feature-param-top">
+                          <span class="feature-param-name">{{ param.name }}</span>
+                        </div>
+                        <span class="feature-param-value">{{ param.value || '--' }}</span>
+                        @if (param.description) {
+                          <p class="feature-param-description">{{ param.description }}</p>
+                        }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <div class="empty-panel compact">
+                    <p>No parameters saved for this feature.</p>
+                  </div>
+                }
+              </article>
+            }
+          </div>
+        }
+      </section>
+
+      <section class="panel signal-detail-panel">
+        <div class="panel-header">
+          <div>
+            <p class="panel-eyebrow">Signal</p>
+            <h2>Details</h2>
+          </div>
+
+          @if (selectedSignal) {
+            <div class="signal-header-tools">
+              <span class="signal-status-pill" [ngClass]="getSignalStatusClass(selectedSignal.status)">
+                {{ getSignalStatusLabel(selectedSignal.status) }}
+              </span>
+
+              <div class="signal-action-cluster">
+                @if (selectedSignal.status !== 'READ') {
+                  <button
+                    class="signal-action-btn"
+                    type="button"
+                    [disabled]="isSignalBusy(selectedSignal.signalId)"
+                    (click)="markSignalAsRead(selectedSignal)">
+                    Read
+                  </button>
+                }
+                @if (selectedSignal.status !== 'ARCHIVED') {
+                  <button
+                    class="signal-action-btn"
+                    type="button"
+                    [disabled]="isSignalBusy(selectedSignal.signalId)"
+                    (click)="archiveSignal(selectedSignal)">
+                    Archive
+                  </button>
+                }
+                @if (selectedSignal.status !== 'NEW') {
+                  <button
+                    class="signal-action-btn"
+                    type="button"
+                    [disabled]="isSignalBusy(selectedSignal.signalId)"
+                    (click)="restoreSignalToNew(selectedSignal)">
+                    New
+                  </button>
+                }
+                <button
+                  class="signal-action-btn signal-action-btn-danger"
+                  type="button"
+                  [disabled]="isSignalBusy(selectedSignal.signalId)"
+                  (click)="deleteSignal(selectedSignal)">
+                  Delete
+                </button>
+              </div>
             </div>
-            @if (hasActualMarketData()) {
-              <div class="chart-card">
-                <h4>Actual Market ({{selectedAgent?.targetMarket}})</h4>
-                <canvas #marketCanvas width="350" height="250"></canvas>
+          }
+        </div>
+
+        @if (!selectedSignal) {
+          <div class="empty-panel">
+            <p>Select a signal from the left to inspect it.</p>
+          </div>
+        } @else {
+          <div class="signal-summary-card" [ngClass]="'tone-' + getSignalTone(selectedSignal)">
+            <div>
+              <span class="signal-summary-label">Final signal</span>
+              <h3>{{ getSignalPrimaryLabel(selectedSignal) }}</h3>
+              <p>{{ selectedSignal.agentName }} · {{ selectedSignal.signalDate | date:'medium' }}</p>
+            </div>
+
+            <div class="signal-summary-score">
+              <span>Main confidence</span>
+              <strong>
+                @if (selectedSignal.probability !== null) {
+                  {{ selectedSignal.probability | percent:'1.0-2' }}
+                } @else {
+                  --
+                }
+              </strong>
+            </div>
+          </div>
+
+          <div class="detail-grid">
+            <div class="detail-card">
+              <span class="detail-label">Estimated action</span>
+              <strong>{{ selectedSignal.estimatedAction || '--' }}</strong>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">Sizing method</span>
+              <strong>{{ selectedSignal.sizingMethod || '--' }}</strong>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">Volume</span>
+              <strong>{{ selectedSignal.volume !== null ? (selectedSignal.volume | number:'1.0-4') : '--' }}</strong>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">Notional</span>
+              <strong>{{ selectedSignal.notional !== null ? (selectedSignal.notional | number:'1.0-2') : '--' }}</strong>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">Stop loss</span>
+              <strong>{{ selectedSignal.stopLossPrice !== null ? (selectedSignal.stopLossPrice | number:'1.0-4') : '--' }}</strong>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">Risk amount</span>
+              <strong>{{ selectedSignal.riskAmount !== null ? (selectedSignal.riskAmount | number:'1.0-2') : '--' }}</strong>
+            </div>
+          </div>
+
+          <div class="probability-panel">
+            <h3>Probability Breakdown</h3>
+            @if (getProbabilityEntries(selectedSignal).length === 0) {
+              <div class="empty-panel compact">
+                <p>No probability data.</p>
+              </div>
+            } @else {
+              <div class="probability-list">
+                @for (entry of getProbabilityEntries(selectedSignal); track entry.label) {
+                  <div class="probability-row">
+                    <div class="probability-row-top">
+                      <span>{{ entry.label }}</span>
+                      <strong>{{ entry.value !== null ? (entry.value | percent:'1.0-2') : '--' }}</strong>
+                    </div>
+                    <div class="probability-bar">
+                      <span
+                        class="probability-fill"
+                        [class.probability-buy]="entry.tone === 'buy'"
+                        [class.probability-hold]="entry.tone === 'hold'"
+                        [class.probability-sell]="entry.tone === 'sell'"
+                        [style.width.%]="getProbabilityPercent(entry.value)">
+                      </span>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="warnings-panel">
+            <h3>Warnings</h3>
+            @if (selectedSignal.warnings?.length) {
+              <div class="warning-list">
+                @for (warning of selectedSignal.warnings; track warning) {
+                  <span class="warning-badge">{{ warning }}</span>
+                }
+              </div>
+            } @else {
+              <div class="empty-panel compact">
+                <p>No warnings on this signal.</p>
               </div>
             }
           </div>
         }
-      </div>
-    }
-
-    <!-- Agent Parameters Section -->
-    @if (selectedAgent) {
-      <div class="parameters-section">
-        <h4>{{selectedAgent.name || selectedAgent.targetMarket}} Parameters:</h4>
-        <div class="parameters-content">
-          <div class="param-group">
-            <div class="param-item">
-              <span class="param-label">Agent ID:</span>
-              <span class="param-value agent-id">#{{selectedAgent.id}}</span>
-            </div>
-            <div class="param-item">
-              <span class="param-label">Target Market:</span>
-              <span class="param-value">{{selectedAgent.targetMarket}}</span>
-            </div>
-            <div class="param-item">
-              <span class="param-label">Status:</span>
-              <span class="param-value" [ngClass]="getStatusClass(selectedAgent.trainingStatus)">
-                {{getStatusLabel(selectedAgent.trainingStatus)}}
-              </span>
-            </div>
-          </div>
-          <div class="param-group">
-            <h5>Prediction Settings</h5>
-            <div class="param-item">
-              <span class="param-label">Prediction Scale:</span>
-              <span class="param-value prediction-scale">{{selectedAgent.predictionScale}}</span>
-            </div>
-            <div class="param-item">
-              <span class="param-label">Frequency:</span>
-              <span class="param-value">{{selectedAgent.frequency}}</span>
-            </div>
-          </div>
-          <div class="param-group">
-            <h5>Input Protocol</h5>
-            <div class="param-item">
-              <span class="param-label">Time Range:</span>
-              <span class="param-value">{{selectedAgent.inputStartTime}} - {{selectedAgent.inputEndTime}}</span>
-            </div>
-            <div class="param-item">
-              <span class="param-label">Frequency:</span>
-              <span class="param-value">{{selectedAgent.inputFrequency}} min</span>
-            </div>
-          </div>
-          <div class="param-group">
-            <h5>Output Protocol</h5>
-            <div class="param-item">
-              <span class="param-label">Time Range:</span>
-              <span class="param-value">{{selectedAgent.outputStartTime}} - {{selectedAgent.outputEndTime}}</span>
-            </div>
-            <div class="param-item">
-              <span class="param-label">Frequency:</span>
-              <span class="param-value">{{selectedAgent.outputFrequency}} min</span>
-            </div>
-          </div>
-          <!-- Features with Parameters -->
-          @if (selectedAgent.agentFeatures && selectedAgent.agentFeatures.length > 0) {
-            <div class="param-group features-group">
-              <h5>Features</h5>
-              @for (feature of selectedAgent.agentFeatures; track feature.id) {
-                <div class="feature-card">
-                  <div class="feature-header-card">
-                    <span class="feature-name">{{feature.featureName}}</span>
-                    @if (feature.featureDescription) {
-                      <span class="feature-description">{{feature.featureDescription}}</span>
-                    }
-                  </div>
-                  @if (feature.parameters && feature.parameters.length > 0) {
-                    <div class="feature-parameters">
-                      @for (param of feature.parameters; track param.id) {
-                        <div class="feature-param">
-                          <span class="feature-param-name">{{param.name}}:</span>
-                          <span class="feature-param-value">{{param.value}}</span>
-                          <span class="feature-param-type">({{param.type}})</span>
-                        </div>
-                      }
-                    </div>
-                  }
-                </div>
-              }
-            </div>
-          }
-        </div>
-      </div>
-    }
+      </section>
+    </section>
   </main>
 
-  <!-- Right Sidebar - Agents -->
   <aside class="sidebar agents-sidebar">
     <div class="agents-section">
       <div class="sidebar-header">
-        <h3>Ready Agents</h3>
+        <div>
+          <p class="sidebar-eyebrow">Agents</p>
+          <h3>Launched Agents</h3>
+        </div>
       </div>
+
       <div class="sidebar-content">
-        @if (isLoadingAgents) {
-          <div class="loading-state">
-            <div class="spinner"></div>
-          </div>
-        }
-        @if (!isLoadingAgents && readyAgents.length === 0) {
+        @if (!isLoadingAgents && launchedAgents.length === 0) {
           <div class="empty-state">
-            <p>No ready agents</p>
+            <p>No launched agents.</p>
           </div>
         }
-        @if (readyAgents.length > 0) {
+
+        @if (launchedAgents.length > 0) {
           <ul class="agent-list">
-            @for (agent of readyAgents; track agent.id) {
+            @for (agent of launchedAgents; track agent.id) {
               <li
-                class="agent-item"
+                class="agent-item agent-item-active"
                 [class.selected]="selectedAgent?.id === agent.id"
                 (click)="selectAgent(agent)">
-                <div class="agent-info">
-                  <span class="agent-name">{{agent.name || 'Agent #' + agent.id}}</span>
-                  <span class="agent-id-badge">#{{agent.id}}</span>
+                <div class="agent-item-top">
+                  <span class="agent-name">{{ agent.name || ('Agent #' + agent.id) }}</span>
+                  <span class="agent-id-badge">#{{ agent.id }}</span>
                 </div>
-                <span class="agent-market">{{agent.targetMarket}}</span>
+                <span class="agent-market">{{ agent.agentFeatures.length }} features configured</span>
+                <div class="agent-item-meta">
+                  <span class="agent-status" [ngClass]="getAgentStatusClass(agent)">{{ getAgentStatusLabel(agent) }}</span>
+                  @if (getAgentSignalCount(agent.id, 'NEW') > 0) {
+                    <span class="new-count-badge">{{ getAgentSignalCount(agent.id, 'NEW') }} new</span>
+                  }
+                </div>
               </li>
             }
           </ul>
@@ -358,14 +462,66 @@
 
     <div class="agents-section">
       <div class="sidebar-header">
-        <h3>Agent en Construction</h3>
+        <div>
+          <p class="sidebar-eyebrow">Agents</p>
+          <h3>Ready Agents</h3>
+        </div>
       </div>
+
+      <div class="sidebar-content">
+        @if (isLoadingAgents) {
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading agents...</p>
+          </div>
+        }
+
+        @if (!isLoadingAgents && readyAgents.length === 0) {
+          <div class="empty-state">
+            <p>No ready agents.</p>
+          </div>
+        }
+
+        @if (!isLoadingAgents && readyAgents.length > 0) {
+          <ul class="agent-list">
+            @for (agent of readyAgents; track agent.id) {
+              <li
+                class="agent-item"
+                [class.selected]="selectedAgent?.id === agent.id"
+                (click)="selectAgent(agent)">
+                <div class="agent-item-top">
+                  <span class="agent-name">{{ agent.name || ('Agent #' + agent.id) }}</span>
+                  <span class="agent-id-badge">#{{ agent.id }}</span>
+                </div>
+                <span class="agent-market">{{ agent.agentFeatures.length }} features configured</span>
+                <div class="agent-item-meta">
+                  <span class="agent-status" [ngClass]="getAgentStatusClass(agent)">{{ getAgentStatusLabel(agent) }}</span>
+                  @if (getAgentSignalCount(agent.id, 'NEW') > 0) {
+                    <span class="new-count-badge">{{ getAgentSignalCount(agent.id, 'NEW') }} new</span>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </div>
+
+    <div class="agents-section">
+      <div class="sidebar-header">
+        <div>
+          <p class="sidebar-eyebrow">Agents</p>
+          <h3>Training Queue</h3>
+        </div>
+      </div>
+
       <div class="sidebar-content">
         @if (!isLoadingAgents && inConstructionAgents.length === 0) {
           <div class="empty-state">
-            <p>No agents in training</p>
+            <p>No agents in training.</p>
           </div>
         }
+
         @if (inConstructionAgents.length > 0) {
           <ul class="agent-list">
             @for (agent of inConstructionAgents; track agent.id) {
@@ -373,13 +529,16 @@
                 class="agent-item in-construction"
                 [class.selected]="selectedAgent?.id === agent.id"
                 (click)="selectAgent(agent)">
-                <div class="agent-info">
-                  <span class="agent-name">{{agent.name || 'Agent #' + agent.id}}</span>
-                  <span class="agent-id-badge">#{{agent.id}}</span>
+                <div class="agent-item-top">
+                  <span class="agent-name">{{ agent.name || ('Agent #' + agent.id) }}</span>
+                  <span class="agent-id-badge">#{{ agent.id }}</span>
                 </div>
-                <span class="agent-status" [ngClass]="getStatusClass(agent.trainingStatus)">
-                  {{getStatusLabel(agent.trainingStatus)}}
-                </span>
+                <span class="agent-market">{{ agent.agentFeatures.length }} features configured</span>
+                <div class="agent-item-meta">
+                  <span class="agent-status" [ngClass]="getStatusClass(agent.trainingStatus)">
+                    {{ getStatusLabel(agent.trainingStatus) }}
+                  </span>
+                </div>
               </li>
             }
           </ul>

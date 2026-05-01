@@ -1,4 +1,6 @@
 export const environment = {
   production: false,
-  apiUrl: 'http://localhost:8080/api' // par exemple
+  apiBaseUrl: '/api',
+  aiBaseUrl: '/ai',
+  signalPollingIntervalMs: 10000
 };

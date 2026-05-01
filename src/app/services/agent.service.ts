@@ -12,7 +12,7 @@ import { AgentsPerUserResponse } from '../models/reponse/agent-response';
 export class AgentService {
 
   features!: FeatureInDto;
-  private readonly baseUrl = environment.apiUrl + '/agent';
+  private readonly baseUrl = `${environment.apiBaseUrl}/agent`;
 
   constructor(private readonly http: HttpClient) {
   }

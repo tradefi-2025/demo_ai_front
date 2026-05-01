@@ -1,706 +1,795 @@
-import { Component, OnInit, ElementRef, ViewChild } from '@angular/core';
-import { NgClass } from '@angular/common';
+import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { environment } from '../environnement/environment';
+import {
+  AgentFeatureResponse,
+  AgentStatus,
+  AgentsPerUserResponse,
+  FeatureParameter
+} from '../models/reponse/agent-response';
+import { OperationResponse } from '../models/reponse/operation-response';
+import { Signal, SignalStatus } from '../models/reponse/signal-response';
 import { AgentService } from '../services/agent.service';
-import { PredictionService } from '../services/prediction.service';
-import { AgentsPerUserResponse, AgentStatus } from '../models/reponse/agent-response';
-import { PredictionResponse } from '../models/reponse/prediction-response';
+import { AiAgentService } from '../services/ai-agent.service';
+import { BrowserNotificationService } from '../services/browser-notification.service';
+import { SignalPollingService } from '../services/signal-polling.service';
+import { SignalService } from '../services/signal.service';
+
+type SignalTab = SignalStatus;
 
 @Component({
   selector: 'app-agent-dashboard',
   standalone: true,
-  imports: [NgClass],
+  imports: [CommonModule],
   templateUrl: './agent-dashboard.component.html',
   styleUrls: ['./agent-dashboard.component.css']
 })
-export class AgentDashboardComponent implements OnInit {
+export class AgentDashboardComponent implements OnInit, OnDestroy {
+  readonly signalTabs: SignalTab[] = ['NEW', 'READ', 'ARCHIVED'];
+  readonly supportsBrowserNotifications: boolean;
 
-  @ViewChild('predictionCanvas') predictionCanvas!: ElementRef<HTMLCanvasElement>;
-  @ViewChild('marketCanvas') marketCanvas!: ElementRef<HTMLCanvasElement>;
-
-  // Agent lists
   allAgents: AgentsPerUserResponse[] = [];
   readyAgents: AgentsPerUserResponse[] = [];
+  launchedAgents: AgentsPerUserResponse[] = [];
   inConstructionAgents: AgentsPerUserResponse[] = [];
+  signals: Signal[] = [];
 
-  // Selected agent
   selectedAgent: AgentsPerUserResponse | null = null;
+  selectedSignal: Signal | null = null;
+  activeSignalTab: SignalTab = 'NEW';
 
-  // Predictions
-  allPredictions: PredictionResponse[] = [];
-  agentPredictions: PredictionResponse[] = [];
-  selectedPrediction: PredictionResponse | null = null;
+  isLoadingAgents = false;
+  isLoadingSignals = false;
+  isRefreshingSignals = false;
+  isAutoFetchEnabled = false;
+  isUpdatingSignalStatus = new Set<number>();
+  isDeletingSignal = new Set<number>();
+  pendingAgentActionIds = new Set<number>();
+  pendingInferenceAgentIds = new Set<number>();
 
-  // Predictions tab state
-  activeTab: 'all' | 'agent' = 'all';
+  errorMessage = '';
+  infoMessage = '';
+  notificationPermission: NotificationPermission;
 
-  // Chart view mode: 'combined' = both on same chart, 'separate' = two separate charts
-  chartViewMode: 'combined' | 'separate' = 'combined';
-
-  // Calendar state
-  currentDate: Date = new Date();
-  calendarDays: { day: number | null; isInPeriod: boolean; isWeekend: boolean }[] = [];
-  selectedDate: Date | null = null;
-  selectedHour: number | null = null;
-
-  // Hours for hourly scale
-  hours: number[] = Array.from({ length: 24 }, (_, i) => i);
-
-  // Period highlight (based on predictionScale)
-  highlightedPeriod: { start: Date; end: Date } | null = null;
-
-  // Year/Month picker
-  years: number[] = [];
-  months: { value: number; name: string }[] = [
-    { value: 0, name: 'January' },
-    { value: 1, name: 'February' },
-    { value: 2, name: 'March' },
-    { value: 3, name: 'April' },
-    { value: 4, name: 'May' },
-    { value: 5, name: 'June' },
-    { value: 6, name: 'July' },
-    { value: 7, name: 'August' },
-    { value: 8, name: 'September' },
-    { value: 9, name: 'October' },
-    { value: 10, name: 'November' },
-    { value: 11, name: 'December' }
-  ];
-
-  // Loading states
-  isLoadingAgents: boolean = false;
-  isLoadingPredictions: boolean = false;
-  isPredicting: boolean = false;
-
-  // Error messages
-  errorMessage: string = '';
+  private readonly localActiveAgentIds = new Set<number>();
+  private readonly signalPollingIntervalMs = environment.signalPollingIntervalMs;
+  private signalPollingSubscription: Subscription | null = null;
+  private hasReceivedInitialSignalSnapshot = false;
 
   constructor(
-    private agentService: AgentService,
-    private predictionService: PredictionService
+    private readonly agentService: AgentService,
+    private readonly signalService: SignalService,
+    private readonly signalPollingService: SignalPollingService,
+    private readonly aiAgentService: AiAgentService,
+    private readonly browserNotificationService: BrowserNotificationService
   ) {
-    // Generate years from 2020 to current year + 5
-    const currentYear = new Date().getFullYear();
-    for (let year = 2020; year <= currentYear + 5; year++) {
-      this.years.push(year);
-    }
+    this.supportsBrowserNotifications = this.browserNotificationService.isSupported;
+    this.notificationPermission = this.browserNotificationService.permission;
   }
 
   ngOnInit(): void {
     this.loadAgents();
-    this.loadAllPredictions();
-    this.generateCalendar();
+    this.refreshSignals();
+  }
+
+  ngOnDestroy(): void {
+    this.stopSignalPolling();
+  }
+
+  get filteredSignals(): Signal[] {
+    return this.signals.filter((signal) => signal.status === this.activeSignalTab);
+  }
+
+  get selectedAgentDisplayName(): string {
+    if (!this.selectedAgent) {
+      return 'No agent selected';
+    }
+
+    return this.selectedAgent.name?.trim() || `Agent #${this.selectedAgent.id}`;
+  }
+
+  get selectedAgentFeatures(): AgentFeatureResponse[] {
+    if (!this.selectedAgent?.agentFeatures) {
+      return [];
+    }
+
+    return [...this.selectedAgent.agentFeatures].sort((a, b) => a.featureName.localeCompare(b.featureName));
+  }
+
+  get selectedAgentSignalCount(): number {
+    if (!this.selectedAgent) {
+      return 0;
+    }
+
+    return this.signals.filter((signal) => signal.agentId === this.selectedAgent?.id).length;
+  }
+
+  get selectedAgentNewSignalCount(): number {
+    if (!this.selectedAgent) {
+      return 0;
+    }
+
+    return this.signals.filter(
+      (signal) => signal.agentId === this.selectedAgent?.id && signal.status === 'NEW'
+    ).length;
+  }
+
+  get selectedAgentStatusLabel(): string {
+    if (!this.selectedAgent) {
+      return 'Inactive';
+    }
+
+    return this.getStatusLabel(this.getEffectiveAgentStatus(this.selectedAgent));
+  }
+
+  get canLaunchSelectedAgent(): boolean {
+    const effectiveStatus = this.selectedAgent ? this.getEffectiveAgentStatus(this.selectedAgent) : null;
+
+    return !!this.selectedAgent
+      && (effectiveStatus === AgentStatus.COMPLETED || effectiveStatus === AgentStatus.INACTIVE)
+      && !this.isAgentActive(this.selectedAgent)
+      && !this.isAgentBusy(this.selectedAgent.id);
+  }
+
+  get canDeactivateSelectedAgent(): boolean {
+    return !!this.selectedAgent
+      && this.isAgentActive(this.selectedAgent)
+      && !this.isAgentBusy(this.selectedAgent.id);
+  }
+
+  get canRequestSignalFromSelectedAgent(): boolean {
+    return !!this.selectedAgent
+      && this.isAgentActive(this.selectedAgent)
+      && !this.isInferenceBusy(this.selectedAgent.id);
+  }
+
+  get generateSignalButtonLabel(): string {
+    if (this.selectedAgent && this.isInferenceBusy(this.selectedAgent.id)) {
+      return 'Requesting...';
+    }
+
+    return 'Generate Signal';
+  }
+
+  get notificationButtonLabel(): string {
+    if (!this.supportsBrowserNotifications) {
+      return 'Notifications unavailable';
+    }
+
+    switch (this.notificationPermission) {
+      case 'granted':
+        return 'Notifications on';
+      case 'denied':
+        return 'Notifications blocked';
+      default:
+        return 'Enable notifications';
+    }
+  }
+
+  get notificationButtonTitle(): string {
+    if (!this.supportsBrowserNotifications) {
+      return 'This browser does not support system notifications.';
+    }
+
+    switch (this.notificationPermission) {
+      case 'granted':
+        return 'Browser alerts are enabled for this site. New signals can trigger a system notification while the tab is in the background.';
+      case 'denied':
+        return 'Notifications are blocked for this site. Open the lock icon in the address bar, then Site settings > Notifications > Allow, and reload the page.';
+      default:
+        return 'Ask the browser for permission to show system alerts for new signals.';
+    }
+  }
+
+  get inferenceHelperText(): string {
+    if (!this.selectedAgent) {
+      return 'Select an agent to launch it or request a signal.';
+    }
+
+    const effectiveStatus = this.getEffectiveAgentStatus(this.selectedAgent);
+
+    if (effectiveStatus === AgentStatus.ACTIVE) {
+      return 'Manual inference is available for the active agent.';
+    }
+
+    if (effectiveStatus === AgentStatus.COMPLETED || effectiveStatus === AgentStatus.INACTIVE) {
+      return 'Launch the selected agent to enable manual inference.';
+    }
+
+    return 'Manual inference becomes available after training completes and the agent is launched.';
+  }
+
+  get refreshSignalsButtonLabel(): string {
+    return this.isRefreshingSignals ? 'Refreshing...' : 'Refresh now';
+  }
+
+  get refreshSignalsButtonTitle(): string {
+    return 'Fetch the latest signals once now.';
+  }
+
+  get autoFetchButtonLabel(): string {
+    return this.isAutoFetchEnabled ? 'Stop auto refresh' : 'Start auto refresh';
+  }
+
+  get autoFetchButtonTitle(): string {
+    if (this.isAutoFetchEnabled) {
+      return `Automatic signal refresh is enabled every ${Math.round(this.signalPollingIntervalMs / 1000)} seconds. Click to stop it.`;
+    }
+
+    return `Enable automatic signal refresh every ${Math.round(this.signalPollingIntervalMs / 1000)} seconds.`;
   }
 
   loadAgents(): void {
     this.isLoadingAgents = true;
+
     this.agentService.getAgentsByUser().subscribe({
       next: (agents) => {
         this.allAgents = agents;
-        this.readyAgents = agents.filter(
-          a => a.trainingStatus === AgentStatus.COMPLETED
-        );
-        this.inConstructionAgents = agents.filter(
-          a => a.trainingStatus === AgentStatus.PENDING ||
-               a.trainingStatus === AgentStatus.IN_PROGRESS
-        );
-        this.isLoadingAgents = false;
-      },
-      error: (err) => {
-        console.error('Error loading agents:', err);
-        this.errorMessage = 'Failed to load agents';
-        this.isLoadingAgents = false;
-      }
-    });
-  }
+        this.reconcileLocalActiveAgents(agents);
+        this.rebuildAgentBuckets();
 
-  loadAllPredictions(): void {
-    this.isLoadingPredictions = true;
-    this.predictionService.getUserPredictions().subscribe({
-      next: (predictions) => {
-        this.allPredictions = predictions;
-        this.isLoadingPredictions = false;
+        if (!this.selectedAgent) {
+          this.selectedAgent = this.launchedAgents[0] ?? this.readyAgents[0] ?? this.inConstructionAgents[0] ?? null;
+        } else {
+          this.selectedAgent = this.allAgents.find((agent) => agent.id === this.selectedAgent?.id) ?? this.selectedAgent;
+        }
+
+        this.isLoadingAgents = false;
       },
-      error: (err) => {
-        console.error('Error loading predictions:', err);
-        this.isLoadingPredictions = false;
+      error: (error) => {
+        this.errorMessage = this.extractErrorMessage(error, 'Failed to load agents.');
+        this.isLoadingAgents = false;
       }
     });
   }
 
   selectAgent(agent: AgentsPerUserResponse): void {
     this.selectedAgent = agent;
-    this.selectedPrediction = null;
-    this.selectedHour = null;
-    this.agentPredictions = this.allPredictions.filter(p => p.agentId === agent.id);
-    // Switch to agent tab when an agent is selected
-    this.activeTab = 'agent';
-    // Update highlighted period if a date is already selected
-    this.updateHighlightedPeriod();
   }
 
-  setActiveTab(tab: 'all' | 'agent'): void {
-    this.activeTab = tab;
-  }
+  selectSignal(signal: Signal): void {
+    this.selectedSignal = signal;
 
-  get displayedPredictions(): PredictionResponse[] {
-    if (this.activeTab === 'all') {
-      return this.allPredictions;
+    const linkedAgent = this.allAgents.find((agent) => agent.id === signal.agentId);
+    if (linkedAgent) {
+      this.selectedAgent = linkedAgent;
     }
-    return this.agentPredictions;
+
+    if (signal.status === 'NEW') {
+      this.updateSignalStatus(signal, 'READ');
+    }
   }
 
-  getAgentNameById(agentId: number): string {
-    const agent = this.allAgents.find(a => a.id === agentId);
-    return agent?.name || agent?.targetMarket || `Agent #${agentId}`;
+  setActiveSignalTab(tab: SignalTab): void {
+    this.activeSignalTab = tab;
   }
 
-  selectPrediction(prediction: PredictionResponse): void {
-    this.selectedPrediction = prediction;
-    // Also select the agent if viewing all predictions
-    if (this.activeTab === 'all') {
-      const agent = this.allAgents.find(a => a.id === prediction.agentId);
-      if (agent) {
-        this.selectedAgent = agent;
-        this.agentPredictions = this.allPredictions.filter(p => p.agentId === agent.id);
+  getSignalCount(tab: SignalTab): number {
+    return this.signals.filter((signal) => signal.status === tab).length;
+  }
+
+  getAgentSignalCount(agentId: number, status?: SignalStatus): number {
+    return this.signals.filter((signal) => signal.agentId === agentId && (!status || signal.status === status)).length;
+  }
+
+  getSortedFeatureParameters(feature: AgentFeatureResponse): FeatureParameter[] {
+    return [...(feature.parameters ?? [])].sort((a, b) => {
+      if (a.required !== b.required) {
+        return Number(b.required) - Number(a.required);
       }
-    }
-    setTimeout(() => {
-      this.drawCharts();
-    }, 100);
-  }
 
-  // Calendar methods
-  generateCalendar(): void {
-    const year = this.currentDate.getFullYear();
-    const month = this.currentDate.getMonth();
-
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-
-    const startingDayOfWeek = firstDay.getDay();
-    const totalDays = lastDay.getDate();
-
-    this.calendarDays = [];
-
-    // Add empty slots for days before the first day of the month
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      this.calendarDays.push({ day: null, isInPeriod: false, isWeekend: false });
-    }
-
-    // Add the days of the month
-    for (let day = 1; day <= totalDays; day++) {
-      const date = new Date(year, month, day);
-      const dayOfWeek = date.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const isInPeriod = this.isDateInHighlightedPeriod(date);
-
-      this.calendarDays.push({ day, isInPeriod, isWeekend });
-    }
-  }
-
-  // Check if a date is within the highlighted period
-  isDateInHighlightedPeriod(date: Date): boolean {
-    if (!this.highlightedPeriod) return false;
-    return date >= this.highlightedPeriod.start && date <= this.highlightedPeriod.end;
-  }
-
-  // Calculate the highlighted period based on agent's predictionScale
-  updateHighlightedPeriod(): void {
-    if (!this.selectedDate || !this.selectedAgent) {
-      this.highlightedPeriod = null;
-      this.generateCalendar();
-      return;
-    }
-
-    const scale = this.selectedAgent.predictionScale;
-    const date = this.selectedDate;
-
-    switch (scale) {
-      case 'HOURLY':
-        // For hourly, highlight just the selected day
-        this.highlightedPeriod = {
-          start: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
-          end: new Date(date.getFullYear(), date.getMonth(), date.getDate())
-        };
-        break;
-
-      case 'DAILY':
-        // For daily, highlight just the selected day
-        this.highlightedPeriod = {
-          start: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
-          end: new Date(date.getFullYear(), date.getMonth(), date.getDate())
-        };
-        break;
-
-      case 'WEEKLY':
-        // For weekly, highlight the entire week (Monday to Friday)
-        const dayOfWeek = date.getDay();
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        const monday = new Date(date);
-        monday.setDate(date.getDate() + mondayOffset);
-        const friday = new Date(monday);
-        friday.setDate(monday.getDate() + 4);
-
-        this.highlightedPeriod = { start: monday, end: friday };
-        break;
-
-      case 'MONTHLY':
-        // For monthly, highlight the entire month
-        this.highlightedPeriod = {
-          start: new Date(date.getFullYear(), date.getMonth(), 1),
-          end: new Date(date.getFullYear(), date.getMonth() + 1, 0)
-        };
-        break;
-
-      default:
-        this.highlightedPeriod = null;
-    }
-
-    this.generateCalendar();
-  }
-
-  // Get the period label for display
-  getPeriodLabel(): string {
-    if (!this.selectedAgent || !this.selectedDate) return '';
-
-    const scale = this.selectedAgent.predictionScale;
-    const date = this.selectedDate;
-
-    switch (scale) {
-      case 'HOURLY':
-        if (this.selectedHour !== null) {
-          return `${date.toLocaleDateString()} at ${this.selectedHour}:00`;
-        }
-        return `${date.toLocaleDateString()} - Select an hour`;
-
-      case 'DAILY':
-        return `Day: ${date.toLocaleDateString()}`;
-
-      case 'WEEKLY':
-        if (this.highlightedPeriod) {
-          const weekNum = this.getWeekNumber(date);
-          return `Week ${weekNum}: ${this.highlightedPeriod.start.toLocaleDateString()} - ${this.highlightedPeriod.end.toLocaleDateString()}`;
-        }
-        return '';
-
-      case 'MONTHLY':
-        return `Month: ${date.toLocaleString('default', { month: 'long', year: 'numeric' })}`;
-
-      default:
-        return '';
-    }
-  }
-
-  // Get week number of the year
-  getWeekNumber(date: Date): number {
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-    const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-  }
-
-  // Check if hour selector should be shown
-  shouldShowHourSelector(): boolean {
-    return this.selectedAgent?.predictionScale === 'HOURLY' && this.selectedDate !== null;
-  }
-
-  // Select an hour
-  selectHour(hour: number): void {
-    this.selectedHour = hour;
-  }
-
-  // Handle hour change from select dropdown
-  onHourChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
-    this.selectedHour = value ? parseInt(value, 10) : null;
-  }
-
-  // Check if hour is selected
-  isSelectedHour(hour: number): boolean {
-    return this.selectedHour === hour;
-  }
-
-  get currentYear(): number {
-    return this.currentDate.getFullYear();
-  }
-
-  get currentMonth(): number {
-    return this.currentDate.getMonth();
-  }
-
-  onYearChange(event: Event): void {
-    const year = parseInt((event.target as HTMLSelectElement).value, 10);
-    this.currentDate = new Date(year, this.currentDate.getMonth(), 1);
-    this.generateCalendar();
-  }
-
-  onMonthChange(event: Event): void {
-    const month = parseInt((event.target as HTMLSelectElement).value, 10);
-    this.currentDate = new Date(this.currentDate.getFullYear(), month, 1);
-    this.generateCalendar();
-  }
-
-  previousMonth(): void {
-    this.currentDate = new Date(
-      this.currentDate.getFullYear(),
-      this.currentDate.getMonth() - 1,
-      1
-    );
-    this.generateCalendar();
-  }
-
-  nextMonth(): void {
-    this.currentDate = new Date(
-      this.currentDate.getFullYear(),
-      this.currentDate.getMonth() + 1,
-      1
-    );
-    this.generateCalendar();
-  }
-
-  selectDay(day: number | null): void {
-    if (day === null) return;
-    this.selectedDate = new Date(
-      this.currentDate.getFullYear(),
-      this.currentDate.getMonth(),
-      day
-    );
-    this.selectedHour = null; // Reset hour when day changes
-    this.updateHighlightedPeriod();
-  }
-
-  isSelectedDay(day: number | null): boolean {
-    if (!day || !this.selectedDate) return false;
-    return (
-      this.selectedDate.getDate() === day &&
-      this.selectedDate.getMonth() === this.currentDate.getMonth() &&
-      this.selectedDate.getFullYear() === this.currentDate.getFullYear()
-    );
-  }
-
-  // Check if a day is in the highlighted period
-  isDayInPeriod(day: number | null): boolean {
-    if (!day || !this.highlightedPeriod) return false;
-    const date = new Date(
-      this.currentDate.getFullYear(),
-      this.currentDate.getMonth(),
-      day
-    );
-    return this.isDateInHighlightedPeriod(date);
-  }
-
-  // Check if a day is a weekend
-  isDayWeekend(day: number | null): boolean {
-    if (!day) return false;
-    const date = new Date(
-      this.currentDate.getFullYear(),
-      this.currentDate.getMonth(),
-      day
-    );
-    const dayOfWeek = date.getDay();
-    return dayOfWeek === 0 || dayOfWeek === 6;
-  }
-
-  getMonthName(): string {
-    return this.currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-  }
-
-  formatDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  // Check if selected agent can make predictions (must be COMPLETED)
-  get canPredict(): boolean {
-    return this.selectedAgent?.trainingStatus === AgentStatus.COMPLETED;
-  }
-
-  // Predict action
-  predict(): void {
-    if (!this.selectedAgent || !this.selectedDate) {
-      this.errorMessage = 'Please select an agent and a date';
-      return;
-    }
-
-    // For hourly scale, require an hour to be selected
-    if (this.selectedAgent.predictionScale === 'HOURLY' && this.selectedHour === null) {
-      this.errorMessage = 'Please select an hour for hourly predictions';
-      return;
-    }
-
-    // Check if agent is ready (COMPLETED)
-    if (this.selectedAgent.trainingStatus !== AgentStatus.COMPLETED) {
-      this.errorMessage = 'This agent is still in training. Please wait until training is complete.';
-      return;
-    }
-
-    this.isPredicting = true;
-    this.errorMessage = '';
-
-    const request = {
-      agentId: this.selectedAgent.id,
-      predictionDate: this.formatPredictionDate()
-    };
-
-    this.predictionService.predict(request).subscribe({
-      next: (prediction) => {
-        this.allPredictions.unshift(prediction);
-        this.agentPredictions.unshift(prediction);
-        this.selectedPrediction = prediction;
-        this.isPredicting = false;
-        setTimeout(() => {
-          this.drawCharts();
-        }, 100);
-      },
-      error: (err) => {
-        console.error('Error making prediction:', err);
-        this.errorMessage = 'Failed to make prediction';
-        this.isPredicting = false;
-      }
+      return a.name.localeCompare(b.name);
     });
   }
 
-  // Format the prediction date - always ISO 8601 with time (YYYY-MM-DDTHH:mm:ss)
-  // The back will determine the period (month, week, day, hour) based on agent's predictionScale
-  formatPredictionDate(): string {
-    if (!this.selectedDate) return '';
-
-    const year = this.selectedDate.getFullYear();
-    const month = String(this.selectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(this.selectedDate.getDate()).padStart(2, '0');
-
-    // For HOURLY, use the selected hour; otherwise default to 00:00:00
-    const hour = (this.selectedAgent?.predictionScale === 'HOURLY' && this.selectedHour !== null)
-      ? String(this.selectedHour).padStart(2, '0')
-      : '00';
-
-    return `${year}-${month}-${day}T${hour}:00:00`;
-  }
-
-  // Toggle between combined and separate chart views
-  toggleChartViewMode(): void {
-    this.chartViewMode = this.chartViewMode === 'combined' ? 'separate' : 'combined';
-    setTimeout(() => this.drawCharts(), 100);
-  }
-
-  // Draw all charts based on current view mode
-  drawCharts(): void {
-    if (this.chartViewMode === 'combined') {
-      this.drawPredictionChart();
-    } else {
-      this.drawPredictionChartSeparate();
-      this.drawMarketChart();
-    }
-  }
-
-  // Chart drawing methods - Combined mode (both on same chart)
-  drawPredictionChart(): void {
-    if (!this.selectedPrediction || !this.predictionCanvas) return;
-
-    const canvas = this.predictionCanvas.nativeElement;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const prediction = this.selectedPrediction.prediction;
-    const actualMarket = this.selectedPrediction.actualMarket;
-
-    if (!prediction || prediction.length === 0) return;
-
-    // Draw prediction line
-    this.drawChart(ctx, canvas, prediction, '#3a86ff', 'Prediction');
-
-    // If actualMarket data is available, draw it on the same chart
-    if (actualMarket && actualMarket.length > 0) {
-      this.drawChartOverlay(ctx, canvas, actualMarket, prediction, '#06d6a0', 'Actual');
-    }
-  }
-
-  // Draw prediction chart only (for separate mode)
-  drawPredictionChartSeparate(): void {
-    if (!this.selectedPrediction || !this.predictionCanvas) return;
-
-    const canvas = this.predictionCanvas.nativeElement;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const prediction = this.selectedPrediction.prediction;
-    if (!prediction || prediction.length === 0) return;
-
-    this.drawChart(ctx, canvas, prediction, '#3a86ff', 'Prediction');
-  }
-
-  // Draw market chart (for separate mode)
-  drawMarketChart(): void {
-    if (!this.selectedPrediction || !this.marketCanvas) return;
-
-    const canvas = this.marketCanvas.nativeElement;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const actualMarket = this.selectedPrediction.actualMarket;
-    if (!actualMarket || actualMarket.length === 0) return;
-
-    this.drawChart(ctx, canvas, actualMarket, '#06d6a0', 'Actual Market');
-  }
-
-  // Check if actual market data is available
-  hasActualMarketData(): boolean {
-    return !!(this.selectedPrediction?.actualMarket && this.selectedPrediction.actualMarket.length > 0);
-  }
-
-  // Draw an overlay chart on existing canvas (for comparison)
-  drawChartOverlay(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    values: number[],
-    referenceValues: number[],
-    color: string,
-    label: string
-  ): void {
-    const width = canvas.width;
-    const height = canvas.height;
-    const padding = 40;
-
-    // Use combined min/max for consistent scale
-    const allValues = [...values, ...referenceValues];
-    const minVal = Math.min(...allValues);
-    const maxVal = Math.max(...allValues);
-    const range = maxVal - minVal || 1;
-
-    const chartWidth = width - padding * 2;
-    const chartHeight = height - padding * 2;
-
-    // Draw the overlay curve
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]); // Dashed line for actual data
-    ctx.beginPath();
-
-    values.forEach((value, index) => {
-      const x = padding + (index / (values.length - 1 || 1)) * chartWidth;
-      const y = padding + chartHeight - ((value - minVal) / range) * chartHeight;
-
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-
-    ctx.stroke();
-    ctx.setLineDash([]); // Reset dash
-
-    // Draw legend
-    const legendY = padding - 10;
-    ctx.fillStyle = color;
-    ctx.font = '10px Inter';
-    ctx.textAlign = 'right';
-    ctx.fillText(`--- ${label}`, width - padding, legendY);
-  }
-
-  drawChart(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    values: number[],
-    color: string,
-    label: string
-  ): void {
-    const width = canvas.width;
-    const height = canvas.height;
-    const padding = 40;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-
-    if (values.length === 0) {
-      ctx.fillStyle = '#8d99ae';
-      ctx.font = '14px Inter';
-      ctx.textAlign = 'center';
-      ctx.fillText('No data available', width / 2, height / 2);
-      return;
+  getProbabilityEntries(signal: Signal | null): Array<{ label: string; value: number | null; tone: string }> {
+    if (!signal?.probabilities) {
+      return [];
     }
 
-    const minVal = Math.min(...values);
-    const maxVal = Math.max(...values);
-    const range = maxVal - minVal || 1;
-
-    const chartWidth = width - padding * 2;
-    const chartHeight = height - padding * 2;
-
-    // Draw grid
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 1;
-
-    // Horizontal grid lines
-    for (let i = 0; i <= 5; i++) {
-      const y = padding + (chartHeight / 5) * i;
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(width - padding, y);
-      ctx.stroke();
-    }
-
-    // Draw the curve
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    values.forEach((value, index) => {
-      const x = padding + (index / (values.length - 1 || 1)) * chartWidth;
-      const y = padding + chartHeight - ((value - minVal) / range) * chartHeight;
-
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-
-    ctx.stroke();
-
-    // Fill area under curve
-    ctx.lineTo(padding + chartWidth, padding + chartHeight);
-    ctx.lineTo(padding, padding + chartHeight);
-    ctx.closePath();
-    ctx.fillStyle = color + '20';
-    ctx.fill();
-
-    // Draw label
-    ctx.fillStyle = '#1d3557';
-    ctx.font = 'bold 14px Inter';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, width / 2, 20);
-
-    // Draw Y-axis labels
-    ctx.fillStyle = '#8d99ae';
-    ctx.font = '10px Inter';
-    ctx.textAlign = 'right';
-    for (let i = 0; i <= 5; i++) {
-      const value = minVal + (range / 5) * (5 - i);
-      const y = padding + (chartHeight / 5) * i;
-      ctx.fillText(value.toFixed(2), padding - 5, y + 3);
-    }
+    return [
+      { label: 'Buy', value: signal.probabilities.buy, tone: 'buy' },
+      { label: 'Hold', value: signal.probabilities.hold, tone: 'hold' },
+      { label: 'Sell', value: signal.probabilities.sell, tone: 'sell' }
+    ];
   }
 
-  getStatusLabel(status: AgentStatus): string {
+  getProbabilityPercent(value: number | null): number {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(100, value * 100));
+  }
+
+  getSignalPrimaryLabel(signal: Signal): string {
+    return signal.signal?.trim() || signal.estimatedAction?.trim() || 'No label';
+  }
+
+  getSignalTone(signal: Signal): 'buy' | 'sell' | 'hold' | 'neutral' {
+    const normalized = (signal.signal || signal.estimatedAction || '').toLowerCase();
+
+    if (normalized.includes('buy')) {
+      return 'buy';
+    }
+
+    if (normalized.includes('sell')) {
+      return 'sell';
+    }
+
+    if (normalized.includes('hold')) {
+      return 'hold';
+    }
+
+    return 'neutral';
+  }
+
+  getSignalStatusClass(status: SignalStatus): string {
     switch (status) {
-      case AgentStatus.PENDING: return 'Pending';
-      case AgentStatus.IN_PROGRESS: return 'Training...';
-      case AgentStatus.COMPLETED: return 'Ready';
-      case AgentStatus.FAILED: return 'Failed';
-      case AgentStatus.CANCELLED: return 'Cancelled';
-      default: return status;
+      case 'NEW':
+        return 'signal-status-new';
+      case 'READ':
+        return 'signal-status-read';
+      case 'ARCHIVED':
+        return 'signal-status-archived';
+    }
+  }
+
+  getSignalStatusLabel(status: SignalStatus): string {
+    switch (status) {
+      case 'NEW':
+        return 'New';
+      case 'READ':
+        return 'Read';
+      case 'ARCHIVED':
+        return 'Archived';
     }
   }
 
   getStatusClass(status: AgentStatus): string {
     switch (status) {
-      case AgentStatus.PENDING: return 'status-pending';
-      case AgentStatus.IN_PROGRESS: return 'status-progress';
-      case AgentStatus.COMPLETED: return 'status-ready';
-      case AgentStatus.FAILED: return 'status-failed';
-      case AgentStatus.CANCELLED: return 'status-cancelled';
-      default: return '';
+      case AgentStatus.PENDING:
+        return 'status-pending';
+      case AgentStatus.IN_PROGRESS:
+        return 'status-progress';
+      case AgentStatus.COMPLETED:
+        return 'status-ready';
+      case AgentStatus.FAILED:
+        return 'status-failed';
+      case AgentStatus.CANCELLED:
+        return 'status-cancelled';
+      case AgentStatus.ACTIVE:
+        return 'runtime-active';
+      case AgentStatus.INACTIVE:
+        return 'runtime-inactive';
     }
+  }
+
+  getStatusLabel(status: AgentStatus): string {
+    switch (status) {
+      case AgentStatus.PENDING:
+        return 'Pending';
+      case AgentStatus.IN_PROGRESS:
+        return 'Training';
+      case AgentStatus.COMPLETED:
+        return 'Ready';
+      case AgentStatus.FAILED:
+        return 'Failed';
+      case AgentStatus.CANCELLED:
+        return 'Cancelled';
+      case AgentStatus.ACTIVE:
+        return 'Active';
+      case AgentStatus.INACTIVE:
+        return 'Inactive';
+    }
+  }
+
+  getAgentStatusClass(agent: AgentsPerUserResponse): string {
+    return this.getStatusClass(this.getEffectiveAgentStatus(agent));
+  }
+
+  getAgentStatusLabel(agent: AgentsPerUserResponse): string {
+    return this.getStatusLabel(this.getEffectiveAgentStatus(agent));
+  }
+
+  isSignalBusy(signalId: number): boolean {
+    return this.isUpdatingSignalStatus.has(signalId) || this.isDeletingSignal.has(signalId);
+  }
+
+  isAgentBusy(agentId: number): boolean {
+    return this.pendingAgentActionIds.has(agentId) || this.pendingInferenceAgentIds.has(agentId);
+  }
+
+  isInferenceBusy(agentId: number): boolean {
+    return this.pendingInferenceAgentIds.has(agentId);
+  }
+
+  isAgentActive(agent: AgentsPerUserResponse): boolean {
+    return this.getEffectiveAgentStatus(agent) === AgentStatus.ACTIVE;
+  }
+
+  async requestBrowserNotificationPermission(): Promise<void> {
+    if (!this.supportsBrowserNotifications) {
+      this.errorMessage = 'Browser notifications are not supported in this browser.';
+      return;
+    }
+
+    if (this.notificationPermission === 'granted') {
+      this.infoMessage = 'Browser alerts are already enabled.';
+      this.errorMessage = '';
+      return;
+    }
+
+    if (this.notificationPermission === 'denied') {
+      this.errorMessage = 'Notifications are blocked for this site. Enable them from the browser site settings, then reload the page.';
+      return;
+    }
+
+    const permission = await this.browserNotificationService.requestPermission();
+    this.notificationPermission = permission;
+
+    if (permission === 'granted') {
+      this.infoMessage = 'Browser alerts enabled.';
+      this.errorMessage = '';
+      return;
+    }
+
+    if (permission === 'denied') {
+      this.errorMessage = 'Notifications are blocked for this site. Enable them from the browser site settings, then reload the page.';
+      return;
+    }
+
+    this.infoMessage = 'Browser alert permission was dismissed.';
+  }
+
+  refreshSignals(): void {
+    if (this.isRefreshingSignals) {
+      return;
+    }
+
+    if (this.signals.length === 0) {
+      this.isLoadingSignals = true;
+    }
+
+    this.isRefreshingSignals = true;
+
+    this.signalService.getUserSignals().subscribe({
+      next: (signals) => {
+        this.processSignalSnapshot(signals);
+        this.isLoadingSignals = false;
+        this.isRefreshingSignals = false;
+      },
+      error: (error) => {
+        this.errorMessage = this.extractErrorMessage(error, 'Failed to load signals.');
+        this.isLoadingSignals = false;
+        this.isRefreshingSignals = false;
+      }
+    });
+  }
+
+  toggleAutoFetch(): void {
+    if (this.isAutoFetchEnabled) {
+      this.stopSignalPolling();
+      this.infoMessage = 'Auto fetch disabled.';
+      return;
+    }
+
+    this.startSignalPolling();
+    this.infoMessage = 'Auto fetch enabled.';
+    this.errorMessage = '';
+  }
+
+  launchSelectedAgent(): void {
+    if (!this.selectedAgent || !this.canLaunchSelectedAgent) {
+      return;
+    }
+
+    this.runAgentAction(
+      this.selectedAgent.id,
+      this.aiAgentService.launchAgent(this.selectedAgent.id),
+      () => {
+        this.localActiveAgentIds.add(this.selectedAgent!.id);
+        this.infoMessage = `${this.selectedAgentDisplayName} launched successfully.`;
+        this.loadAgents();
+      }
+    );
+  }
+
+  deactivateSelectedAgent(): void {
+    if (!this.selectedAgent || !this.canDeactivateSelectedAgent) {
+      return;
+    }
+
+    this.runAgentAction(
+      this.selectedAgent.id,
+      this.aiAgentService.deactivateAgent(this.selectedAgent.id),
+      () => {
+        this.localActiveAgentIds.delete(this.selectedAgent!.id);
+        this.infoMessage = `${this.selectedAgentDisplayName} deactivated successfully.`;
+        this.loadAgents();
+      }
+    );
+  }
+
+  async onGenerateSignal(): Promise<void> {
+    if (!this.selectedAgent || !this.canRequestSignalFromSelectedAgent) {
+      return;
+    }
+
+    const agentId = this.selectedAgent.id;
+    const knownSignalIds = new Set(this.signals.map((signal) => signal.signalId));
+
+    this.pendingInferenceAgentIds.add(agentId);
+    this.errorMessage = '';
+    this.infoMessage = '';
+
+    this.aiAgentService.requestInference(agentId).subscribe({
+      next: async (response) => {
+        if (!this.isOperationSuccessful(response)) {
+          this.errorMessage = response.errorMessage || 'Signal inference failed.';
+          this.pendingInferenceAgentIds.delete(agentId);
+          return;
+        }
+
+        this.infoMessage = 'Signal request accepted. Waiting for persistence...';
+
+        const foundSignal = await this.waitForPersistedSignal(agentId, knownSignalIds);
+        this.pendingInferenceAgentIds.delete(agentId);
+
+        if (foundSignal) {
+          this.infoMessage = 'A new signal has been received.';
+          this.selectSignal(foundSignal);
+        } else {
+          this.infoMessage = 'Inference launched. The signal will appear as soon as it is stored.';
+        }
+      },
+      error: (error) => {
+        this.errorMessage = this.extractErrorMessage(error, 'Signal inference failed.');
+        this.pendingInferenceAgentIds.delete(agentId);
+      }
+    });
+  }
+
+  markSignalAsRead(signal: Signal): void {
+    this.updateSignalStatus(signal, 'READ');
+  }
+
+  archiveSignal(signal: Signal): void {
+    this.updateSignalStatus(signal, 'ARCHIVED');
+  }
+
+  restoreSignalToNew(signal: Signal): void {
+    this.updateSignalStatus(signal, 'NEW');
+  }
+
+  deleteSignal(signal: Signal): void {
+    if (this.isSignalBusy(signal.signalId)) {
+      return;
+    }
+
+    this.errorMessage = '';
+    this.infoMessage = '';
+    this.isDeletingSignal.add(signal.signalId);
+
+    this.signalService.deleteSignal(signal.signalId).subscribe({
+      next: () => {
+        this.signals = this.signals.filter((item) => item.signalId !== signal.signalId);
+
+        if (this.selectedSignal?.signalId === signal.signalId) {
+          this.selectedSignal = null;
+        }
+
+        this.isDeletingSignal.delete(signal.signalId);
+      },
+      error: (error) => {
+        this.errorMessage = this.extractErrorMessage(error, 'Failed to delete signal.');
+        this.isDeletingSignal.delete(signal.signalId);
+      }
+    });
+  }
+
+  dismissInfoMessage(): void {
+    this.infoMessage = '';
+  }
+
+  dismissErrorMessage(): void {
+    this.errorMessage = '';
+  }
+
+  private startSignalPolling(): void {
+    if (this.isAutoFetchEnabled) {
+      return;
+    }
+
+    this.isAutoFetchEnabled = true;
+    this.signalPollingSubscription?.unsubscribe();
+    this.signalPollingSubscription = this.signalPollingService
+      .createPollingStream(this.signalPollingIntervalMs)
+      .subscribe({
+        next: (signals) => {
+          this.processSignalSnapshot(signals);
+        },
+        error: (error) => {
+          this.errorMessage = this.extractErrorMessage(error, 'Auto fetch failed.');
+          this.stopSignalPolling();
+        }
+      });
+  }
+
+  private stopSignalPolling(): void {
+    this.signalPollingSubscription?.unsubscribe();
+    this.signalPollingSubscription = null;
+    this.isAutoFetchEnabled = false;
+  }
+
+  private processSignalSnapshot(signals: Signal[]): void {
+    const sortedSignals = this.sortSignalsByDateDescending(signals);
+    const previousSignalIds = new Set(this.signals.map((signal) => signal.signalId));
+    const newSignals = sortedSignals.filter((signal) => !previousSignalIds.has(signal.signalId));
+
+    this.signals = sortedSignals;
+
+    if (this.selectedSignal) {
+      this.selectedSignal = this.signals.find((signal) => signal.signalId === this.selectedSignal?.signalId) ?? null;
+    }
+
+    if (this.hasReceivedInitialSignalSnapshot) {
+      newSignals
+        .filter((signal) => signal.status === 'NEW')
+        .forEach((signal) => this.browserNotificationService.notifySignal(signal));
+    }
+
+    this.hasReceivedInitialSignalSnapshot = true;
+  }
+
+  private async waitForPersistedSignal(agentId: number, knownSignalIds: Set<number>): Promise<Signal | null> {
+    const attempts = 6;
+    const waitMs = 2000;
+
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await this.delay(waitMs);
+
+      try {
+        const signals = await firstValueFrom(this.signalService.getUserSignals());
+        this.processSignalSnapshot(signals);
+
+        const newSignal = this.signals.find(
+          (signal) => signal.agentId === agentId && !knownSignalIds.has(signal.signalId)
+        );
+
+        if (newSignal) {
+          return newSignal;
+        }
+      } catch (error) {
+        this.errorMessage = this.extractErrorMessage(error, 'Signal was requested but could not be refreshed.');
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  private updateSignalStatus(signal: Signal, status: SignalStatus): void {
+    if (signal.status === status || this.isSignalBusy(signal.signalId)) {
+      return;
+    }
+
+    this.errorMessage = '';
+    this.infoMessage = '';
+    this.isUpdatingSignalStatus.add(signal.signalId);
+
+    this.signalService.updateSignalStatus(signal.signalId, { status }).subscribe({
+      next: (updatedSignal) => {
+        this.replaceSignal(updatedSignal);
+        this.isUpdatingSignalStatus.delete(signal.signalId);
+      },
+      error: (error) => {
+        this.errorMessage = this.extractErrorMessage(error, 'Failed to update signal status.');
+        this.isUpdatingSignalStatus.delete(signal.signalId);
+      }
+    });
+  }
+
+  private replaceSignal(updatedSignal: Signal): void {
+    this.signals = this.sortSignalsByDateDescending(
+      this.signals.map((signal) => signal.signalId === updatedSignal.signalId ? updatedSignal : signal)
+    );
+
+    if (this.selectedSignal?.signalId === updatedSignal.signalId) {
+      this.selectedSignal = updatedSignal;
+    }
+  }
+
+  private rebuildAgentBuckets(): void {
+    this.launchedAgents = this.allAgents.filter(
+      (agent) => this.getEffectiveAgentStatus(agent) === AgentStatus.ACTIVE
+    );
+    this.readyAgents = this.allAgents.filter(
+      (agent) => {
+        const effectiveStatus = this.getEffectiveAgentStatus(agent);
+        return effectiveStatus === AgentStatus.COMPLETED || effectiveStatus === AgentStatus.INACTIVE;
+      }
+    );
+    this.inConstructionAgents = this.allAgents.filter(
+      (agent) => !this.launchedAgents.includes(agent) && !this.readyAgents.includes(agent)
+    );
+  }
+
+  private reconcileLocalActiveAgents(agents: AgentsPerUserResponse[]): void {
+    for (const agent of agents) {
+      const backendStatus = agent.trainingStatus;
+
+      if (backendStatus === AgentStatus.ACTIVE) {
+        this.localActiveAgentIds.add(agent.id);
+      } else {
+        this.localActiveAgentIds.delete(agent.id);
+      }
+    }
+  }
+
+  private getEffectiveAgentStatus(agent: AgentsPerUserResponse): AgentStatus {
+    if (this.localActiveAgentIds.has(agent.id)) {
+      return AgentStatus.ACTIVE;
+    }
+
+    return agent.trainingStatus;
+  }
+
+  private runAgentAction(
+    agentId: number,
+    request$: ReturnType<AiAgentService['launchAgent']>,
+    onSuccess: () => void
+  ): void {
+    this.pendingAgentActionIds.add(agentId);
+    this.errorMessage = '';
+    this.infoMessage = '';
+
+    request$.subscribe({
+      next: (response) => {
+        if (!this.isOperationSuccessful(response)) {
+          this.errorMessage = response.errorMessage || 'The operation failed.';
+          this.pendingAgentActionIds.delete(agentId);
+          return;
+        }
+
+        onSuccess();
+        this.pendingAgentActionIds.delete(agentId);
+      },
+      error: (error) => {
+        this.errorMessage = this.extractErrorMessage(error, 'The operation failed.');
+        this.pendingAgentActionIds.delete(agentId);
+      }
+    });
+  }
+
+  private isOperationSuccessful(response: OperationResponse | null | undefined): boolean {
+    return response?.success === true;
+  }
+
+  private sortSignalsByDateDescending(signals: Signal[]): Signal[] {
+    return [...signals].sort((a, b) => new Date(b.signalDate).getTime() - new Date(a.signalDate).getTime());
+  }
+
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 0) {
+        return 'Server unreachable. Please verify that the requested service is running.';
+      }
+
+      const backendMessage = error.error?.errorMessage || error.error?.message;
+      return backendMessage || error.message || fallback;
+    }
+
+    if (error instanceof Error) {
+      return error.message || fallback;
+    }
+
+    return fallback;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

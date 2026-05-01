@@ -4,7 +4,7 @@ import { environment } from '../environnement/environment';
 import { SignUpDto } from "../models/request/sign-up-dto";
 import { SignInDto } from "../models/request/sign-in-dto";
 import { SignInResponseDto } from "../models/reponse/sign-in-response-dto"
-import { BehaviorSubject, Observable, tap, of } from "rxjs";
+import { BehaviorSubject, Observable, ReplaySubject, tap, of } from "rxjs";
 import { Router } from '@angular/router';
 import { map, catchError } from 'rxjs/operators';
 
@@ -12,9 +12,9 @@ import { map, catchError } from 'rxjs/operators';
   providedIn: 'root'
 })
 export class AuthService {
-  private readonly baseUrl = environment.apiUrl;
+  private readonly baseUrl = environment.apiBaseUrl;
 
-  private isAuthenticatedSubject = new BehaviorSubject<boolean>(false);
+  private isAuthenticatedSubject = new ReplaySubject<boolean>(1);
   public isAuthenticated$ = this.isAuthenticatedSubject.asObservable();
   private userDetailsSubject = new BehaviorSubject<SignInResponseDto | null>(null);
   public userDetails$ = this.userDetailsSubject.asObservable();
@@ -22,21 +22,21 @@ export class AuthService {
 
 
   constructor(private readonly http: HttpClient, private readonly router: Router) {
-    this.isAuthenticated().subscribe();
+    this.loadAuthenticationState().subscribe();
   }
 
-  private isAuthenticated(): Observable<any> {
+  private loadAuthenticationState(): Observable<boolean> {
     return this.http.get<SignInResponseDto>(`${this.baseUrl}/user/me`,
       { withCredentials: true }
     ).pipe(
       map(userDetails => {
         this.isAuthenticatedSubject.next(true);
         this.userDetailsSubject.next(userDetails);
-        this.router.navigate(['']); 
-        return of(true);
+        return true;
       }),
-      catchError(err => {
-        // En cas d'erreur, supposer non authentifié
+      catchError(() => {
+        this.isAuthenticatedSubject.next(false);
+        this.userDetailsSubject.next(null);
         return of(false);
       })
     );
@@ -51,8 +51,7 @@ export class AuthService {
       tap((userDetails: SignInResponseDto) => {
         this.userDetailsSubject.next(userDetails);
       }),
-      tap(() => this.isAuthenticatedSubject.next(true)),
-      tap(() => this.router.navigate(['']))
+      tap(() => this.isAuthenticatedSubject.next(true))
     );
   }
 

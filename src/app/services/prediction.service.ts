@@ -10,7 +10,7 @@ import { PredictionRequest } from '../models/request/prediction-request';
 })
 export class PredictionService {
 
-  private readonly baseUrl = environment.apiUrl + '/prediction';
+  private readonly baseUrl = `${environment.apiBaseUrl}/prediction`;
 
   constructor(private readonly http: HttpClient) {}
 

@@ -1,6 +1,6 @@
 export const environment = {
-    production: true,
-    //apiUrl: 'https://fikingtrader-slnnd.ondigitalocean.app/api' // URL de production
-    apiUrl: '/api' 
-
-  };
+  production: true,
+  apiBaseUrl: '/api',
+  aiBaseUrl: '/ai',
+  signalPollingIntervalMs: 10000
+};
