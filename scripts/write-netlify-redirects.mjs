@@ -5,7 +5,7 @@ const backendOrigin = normalizeOrigin(
   process.env.NETLIFY_BACKEND_API_ORIGIN || 'https://fikingtrader-slnnd.ondigitalocean.app'
 );
 const aiOrigin = normalizeOrigin(
-  process.env.NETLIFY_AI_SERVICE_ORIGIN || ''
+  process.env.NETLIFY_AI_SERVICE_ORIGIN || 'http://159.65.115.78:5000'
 );
 
 const distDir = resolve(process.cwd(), 'dist');
